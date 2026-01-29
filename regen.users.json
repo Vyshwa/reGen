@@ -1,0 +1,22 @@
+[{
+  "_id": {
+    "$oid": "6979f0d7ffe6216336978c57"
+  },
+  "userId": "Vyshwa",
+  "username": "Vyshwa",
+  "password": "$2a$10$602bqoZtCVU5mgS/cR2PeO/GG8qm1qtNY9PrQLDT0Vsam2bhDvz1y",
+  "name": "Vyshwa",
+  "role": "owner",
+  "status": "active",
+  "joiningDate": "2026-01-27T15:56:00.073Z",
+  "skills": [],
+  "createdAt": {
+    "$date": "2026-01-27T15:56:00.083Z"
+  },
+  "updatedAt": {
+    "$date": "2026-01-28T12:12:10.320Z"
+  },
+  "__v": 0,
+  "age": 0,
+  "dateOfBirth": "2025-09-24"
+}]

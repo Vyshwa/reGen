@@ -50,7 +50,7 @@ export default function StaffProfileModule({ userProfile }) {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // SuperAdmin deploy state
-  const isSuperAdmin = userProfile.username === 'Vyshwa' || (userProfile.userId?.toText ? userProfile.userId.toText() === 'Vyshwa' : (userProfile.id?.toText ? userProfile.id.toText() === 'Vyshwa' : false));
+  const isSuperAdmin = userProfile.role?.hasOwnProperty('owner');
   const [isPulling, setIsPulling] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployLog, setDeployLog] = useState('');

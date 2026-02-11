@@ -355,7 +355,7 @@ app.use('/api/holidays', holidayRoutes);
 app.get('/api/holidays', getAllHolidays);
 app.post('/api/holidays', addHoliday);
 
-// === SuperAdmin Deploy Endpoints (Vyshwa only) ===
+// === SuperAdmin Deploy Endpoints (owner role only) ===
 import { exec } from 'child_process';
 import { promisify } from 'util';
 const execAsync = promisify(exec);
@@ -368,7 +368,7 @@ const isSuperAdmin = async (req) => {
   const userId = req.headers['x-user-id'];
   if (!userId) return false;
   const user = await User.findOne({ $or: [{ userId }, { username: userId }] });
-  return user && (user.username === 'Vyshwa' || user.userId === 'Vyshwa');
+  return user && user.role === 'owner';
 };
 
 app.post('/api/deploy/git-pull', async (req, res) => {

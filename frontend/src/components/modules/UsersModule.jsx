@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Camera, Link2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Camera, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { Principal } from '@dfinity/principal';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
@@ -99,29 +99,23 @@ export default function UsersModule({ userProfile }) {
 
   const handleGenerateResetLink = async (user) => {
     try {
-      const adminIdentifier = localStorage.getItem('current_user') || toIdText(userProfile.id || userProfile.userId);
-      const adminPassword = window.prompt('Enter your password to generate reset link');
-      if (!adminPassword) return;
+      const confirmed = window.confirm(`Reset password for "${user.name || user.username}" to default (1234)?`);
+      if (!confirmed) return;
+      const adminId = userProfile.username || localStorage.getItem('current_user') || toIdText(userProfile.id || userProfile.userId);
       const targetIdentifier = toIdText(user.userId || user.id || user.username);
-      const res = await fetch('/api/auth/reset-link', {
+      const res = await fetch('/api/auth/admin-reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminIdentifier, adminPassword, targetIdentifier })
+        headers: { 'Content-Type': 'application/json', 'x-user-id': adminId },
+        body: JSON.stringify({ targetIdentifier })
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Failed to generate reset link' }));
-        throw new Error(err.message || 'Failed to generate reset link');
+        const err = await res.json().catch(() => ({ message: 'Failed to reset password' }));
+        throw new Error(err.message || 'Failed to reset password');
       }
       const data = await res.json();
-      const link = data.link;
-      try {
-        await navigator.clipboard.writeText(link);
-        toast.success('Reset link copied to clipboard');
-      } catch {
-        window.prompt('Copy reset link', link);
-      }
+      toast.success(data.message || 'Password reset successfully');
     } catch (e) {
-      toast.error(e.message || 'Failed to generate reset link');
+      toast.error(e.message || 'Failed to reset password');
     }
   };
 
@@ -499,8 +493,8 @@ export default function UsersModule({ userProfile }) {
                               </div>
                             </div>
                             <div className="mt-3 flex items-center justify-end gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => handleGenerateResetLink(user)}>
-                                <Link2 className="h-4 w-4" />
+                              <Button variant="ghost" size="icon" onClick={() => handleGenerateResetLink(user)} title="Reset Password">
+                                <KeyRound className="h-4 w-4" />
                               </Button>
                               <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(user)}>
                                 <Pencil className="h-4 w-4" />
@@ -561,8 +555,9 @@ export default function UsersModule({ userProfile }) {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleGenerateResetLink(user)}
+                          title="Reset Password"
                         >
-                          <Link2 className="h-4 w-4" />
+                          <KeyRound className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"

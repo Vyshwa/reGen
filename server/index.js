@@ -213,6 +213,37 @@ app.post('/api/auth/change-password', async (req, res) => {
   }
 });
 
+// Admin resets a user's password directly (no admin password prompt needed)
+app.post('/api/auth/admin-reset-password', async (req, res) => {
+  try {
+    const adminId = String(req.headers['x-user-id'] || '').trim();
+    const targetIdentifier = String(req.body?.targetIdentifier || '').trim();
+    const newPassword = String(req.body?.newPassword || '') || DEFAULT_PASSWORD;
+
+    if (!adminId || !targetIdentifier) {
+      return res.status(400).json({ message: 'Admin header and targetIdentifier are required' });
+    }
+
+    const admin = await User.findOne({ $or: [{ userId: adminId }, { username: adminId }] });
+    if (!admin || !['admin', 'owner', 'param'].includes(String(admin.role))) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const target = await User.findOne({ $or: [{ userId: targetIdentifier }, { username: targetIdentifier }] }).select('+password');
+    if (!target) return res.status(404).json({ message: 'Target user not found' });
+
+    target.password = await bcrypt.hash(newPassword, 10);
+    target.mustChangePassword = newPassword === DEFAULT_PASSWORD;
+    target.resetTokenHash = undefined;
+    target.resetTokenExpiresAt = undefined;
+    await target.save();
+
+    res.status(200).json({ message: `Password reset to "${newPassword}" successfully` });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
 app.post('/api/auth/reset-link', async (req, res) => {
   try {
     const adminIdentifier = String(req.body?.adminIdentifier || '').trim();

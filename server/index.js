@@ -361,8 +361,7 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 const REPO_DIR = '/home/vyshwa/web/reGen';
-const LIVE_DIR = '/home/vyshwa/web/regen_live';
-const NGINX_DIR = '/web/regen_live';
+const LIVE_DIR = '/web/regen_live';
 
 const isSuperAdmin = async (req) => {
   const userId = req.headers['x-user-id'];
@@ -387,16 +386,12 @@ app.post('/api/deploy/rebuild', async (req, res) => {
     // 1. Build frontend
     const buildResult = await execAsync('npm run build', { cwd: path.join(REPO_DIR, 'frontend'), timeout: 120000 });
 
-    // 2. Sync to regen_live
+    // 2. Sync to live directory (nginx root)
     await execAsync(`rm -rf ${LIVE_DIR}/assets ${LIVE_DIR}/index.html ${LIVE_DIR}/logo.png`, { cwd: REPO_DIR });
     await execAsync(`cp -r ${REPO_DIR}/frontend/dist/* ${LIVE_DIR}/`, { cwd: REPO_DIR });
     await execAsync(`cp -r ${REPO_DIR}/server/* ${LIVE_DIR}/server/`, { cwd: REPO_DIR });
 
-    // 3. Sync to nginx root
-    await execAsync(`sudo rm -rf ${NGINX_DIR}/assets ${NGINX_DIR}/index.html ${NGINX_DIR}/logo.png`, { cwd: REPO_DIR });
-    await execAsync(`sudo cp -r ${LIVE_DIR}/assets ${LIVE_DIR}/index.html ${LIVE_DIR}/logo.png ${NGINX_DIR}/`, { cwd: REPO_DIR });
-
-    // 4. Install server deps if needed
+    // 3. Install server deps if needed
     await execAsync('npm install --production', { cwd: path.join(LIVE_DIR, 'server'), timeout: 60000 });
 
     res.json({ success: true, output: 'Build & deploy complete.\n' + buildResult.stdout });

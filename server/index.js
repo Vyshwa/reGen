@@ -243,7 +243,7 @@ app.post('/api/auth/reset-link', async (req, res) => {
     target.resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
     await target.save();
 
-    const base = process.env.FRONTEND_BASE_URL || `https//regen.krishub.in`;
+    const base = process.env.FRONTEND_BASE_URL || `https://regen.krishub.in`;
     const link = `${base}/?resetToken=${token}`;
     res.status(200).json({ link, expiresInMinutes: 60 });
   } catch (e) {

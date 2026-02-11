@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Camera, KeyRound } from 'lucide-react';
+import { Plus, Pencil, Trash2, Camera, KeyRound, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { Principal } from '@dfinity/principal';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
@@ -37,8 +37,22 @@ export default function UsersModule({ userProfile }) {
   });
 
   const [previewUrl, setPreviewUrl] = useState('');
+  const [filterRole, setFilterRole] = useState('all');
 
   const isMobile = useIsMobile();
+
+  // Role styling config
+  const roleBadgeStyles = {
+    param:      'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 border-violet-300 dark:border-violet-700',
+    owner:      'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+    admin:      'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-300 dark:border-blue-700',
+    staff:      'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
+    intern:     'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 border-sky-300 dark:border-sky-700',
+    freelancer: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-300 dark:border-orange-700',
+  };
+  const roleOrder = { param: 0, owner: 1, admin: 2, staff: 3, intern: 4, freelancer: 5 };
+  const getRoleKey = (user) => Object.keys(user.role)[0] || 'staff';
+  const getRoleBadge = (roleKey) => roleBadgeStyles[roleKey] || roleBadgeStyles.staff;
 
   const isAdmin = userProfile.role.hasOwnProperty('admin');
   const isOwner = userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
@@ -56,13 +70,39 @@ export default function UsersModule({ userProfile }) {
     );
   }
 
-  // Filter users based on role
-  const visibleUsers = users.filter(user => {
-    if (isAdmin) return true;
-    // Owner sees Staff, Admins, and Owners
-    if (isOwner) return user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer') || user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('owner') || user.role.hasOwnProperty('param');
-    return false;
-  });
+  // Filter users based on access + active filter, then sort
+  const visibleUsers = users
+    .filter(user => {
+      if (isAdmin) return true;
+      if (isOwner) return ['staff','intern','freelancer','admin','owner','param'].some(r => user.role.hasOwnProperty(r));
+      return false;
+    })
+    .filter(user => filterRole === 'all' || getRoleKey(user) === filterRole)
+    .sort((a, b) => {
+      const ra = roleOrder[getRoleKey(a)] ?? 99;
+      const rb = roleOrder[getRoleKey(b)] ?? 99;
+      if (ra !== rb) return ra - rb;
+      return (a.name || a.username || '').localeCompare(b.name || b.username || '');
+    });
+
+  // Count users per role for filter badges
+  const roleCounts = users.reduce((acc, user) => {
+    if (isAdmin || (isOwner && ['staff','intern','freelancer','admin','owner','param'].some(r => user.role.hasOwnProperty(r)))) {
+      const rk = getRoleKey(user);
+      acc[rk] = (acc[rk] || 0) + 1;
+      acc.all = (acc.all || 0) + 1;
+    }
+    return acc;
+  }, { all: 0 });
+
+  const filterOptions = [
+    { value: 'all', label: 'All' },
+    { value: 'owner', label: 'Owner' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'staff', label: 'Staff' },
+    { value: 'intern', label: 'Intern' },
+    { value: 'freelancer', label: 'Freelancer' },
+  ].filter(opt => opt.value === 'all' || (roleCounts[opt.value] || 0) > 0);
 
   // Role Options based on current user role
   const roleOptions = [
@@ -437,9 +477,36 @@ export default function UsersModule({ userProfile }) {
         </Dialog>
       </div>
 
+      {/* Role filter pills */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Filter className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        {filterOptions.map(opt => {
+          const active = filterRole === opt.value;
+          const badgeCls = opt.value !== 'all' ? getRoleBadge(opt.value) : '';
+          return (
+            <button
+              key={opt.value}
+              onClick={() => setFilterRole(opt.value)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-all ${
+                active
+                  ? opt.value === 'all'
+                    ? 'bg-foreground text-background border-foreground'
+                    : `${badgeCls} ring-2 ring-offset-1 ring-current`
+                  : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted'
+              }`}
+            >
+              {opt.label}
+              <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${
+                active ? 'bg-background/20 text-current' : 'bg-muted text-muted-foreground'
+              }`}>{roleCounts[opt.value] || 0}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>{isOwner ? 'My Staff' : 'All Users'}</CardTitle>
+          <CardTitle>{isOwner ? 'My Staff' : 'All Users'} <span className="text-sm font-normal text-muted-foreground">({visibleUsers.length})</span></CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -470,8 +537,8 @@ export default function UsersModule({ userProfile }) {
                                 <p className="text-sm font-semibold leading-tight truncate">{name || '--'}</p>
                                 <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                               </div>
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] capitalize text-foreground/80">
-                                {Object.keys(user.role)[0]}
+                              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${getRoleBadge(getRoleKey(user))}`}>
+                                {getRoleKey(user)}
                               </span>
                             </div>
                             <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
@@ -546,7 +613,9 @@ export default function UsersModule({ userProfile }) {
                     <TableCell>{user.dateOfBirth || '--'}</TableCell>
                     <TableCell>{(user.age ?? computeAge(user.dateOfBirth)) ?? '--'}</TableCell>
                     <TableCell>
-                      <span className="capitalize">{Object.keys(user.role)[0]}</span>
+                      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${getRoleBadge(getRoleKey(user))}`}>
+                        {getRoleKey(user)}
+                      </span>
                     </TableCell>
                     <TableCell>₹{user.salary?.toString()}</TableCell>
                     <TableCell className="text-right">

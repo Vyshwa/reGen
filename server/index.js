@@ -355,6 +355,56 @@ app.use('/api/holidays', holidayRoutes);
 app.get('/api/holidays', getAllHolidays);
 app.post('/api/holidays', addHoliday);
 
+// === SuperAdmin Deploy Endpoints (Vyshwa only) ===
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
+
+const REPO_DIR = path.resolve(__dirname, '..');
+const LIVE_DIR = '/home/vyshwa/web/regen_live';
+const NGINX_DIR = '/web/regen_live';
+
+const isSuperAdmin = async (req) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return false;
+  const user = await User.findOne({ $or: [{ userId }, { username: userId }] });
+  return user && (user.username === 'Vyshwa' || user.userId === 'Vyshwa');
+};
+
+app.post('/api/deploy/git-pull', async (req, res) => {
+  if (!(await isSuperAdmin(req))) return res.status(403).json({ message: 'Forbidden' });
+  try {
+    const { stdout, stderr } = await execAsync('git pull origin main', { cwd: REPO_DIR, timeout: 30000 });
+    res.json({ success: true, output: stdout + (stderr || '') });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message, output: e.stderr || e.stdout || '' });
+  }
+});
+
+app.post('/api/deploy/rebuild', async (req, res) => {
+  if (!(await isSuperAdmin(req))) return res.status(403).json({ message: 'Forbidden' });
+  try {
+    // 1. Build frontend
+    const buildResult = await execAsync('npm run build', { cwd: path.join(REPO_DIR, 'frontend'), timeout: 120000 });
+
+    // 2. Sync to regen_live
+    await execAsync(`rm -rf ${LIVE_DIR}/assets ${LIVE_DIR}/index.html ${LIVE_DIR}/logo.png`, { cwd: REPO_DIR });
+    await execAsync(`cp -r ${REPO_DIR}/frontend/dist/* ${LIVE_DIR}/`, { cwd: REPO_DIR });
+    await execAsync(`cp -r ${REPO_DIR}/server/* ${LIVE_DIR}/server/`, { cwd: REPO_DIR });
+
+    // 3. Sync to nginx root
+    await execAsync(`sudo rm -rf ${NGINX_DIR}/assets ${NGINX_DIR}/index.html ${NGINX_DIR}/logo.png`, { cwd: REPO_DIR });
+    await execAsync(`sudo cp -r ${LIVE_DIR}/assets ${LIVE_DIR}/index.html ${LIVE_DIR}/logo.png ${NGINX_DIR}/`, { cwd: REPO_DIR });
+
+    // 4. Install server deps if needed
+    await execAsync('npm install --production', { cwd: path.join(LIVE_DIR, 'server'), timeout: 60000 });
+
+    res.json({ success: true, output: 'Build & deploy complete.\n' + buildResult.stdout });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message, output: e.stderr || e.stdout || '' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

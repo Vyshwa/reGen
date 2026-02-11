@@ -355,7 +355,7 @@ app.use('/api/holidays', holidayRoutes);
 app.get('/api/holidays', getAllHolidays);
 app.post('/api/holidays', addHoliday);
 
-// === SuperAdmin Deploy Endpoints (owner role only) ===
+// === SuperAdmin Deploy Endpoints (Vyshwa only) ===
 import { exec } from 'child_process';
 import { promisify } from 'util';
 const execAsync = promisify(exec);

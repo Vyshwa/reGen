@@ -4,7 +4,12 @@ frontend/node_modules/
 server/node_modules/
 server/.env
 uploads/
+assets
 frontend/uploads/
 frontend/assets/
+package-lock.json
+frontend/package-lock.json
+server/package-lock.json
+nginx.conf.new
 *.log
 .DS_Store

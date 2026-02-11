@@ -4,6 +4,14 @@
 @tailwind utilities;
 /* stylelint-enable at-rule-no-unknown */
 
+/* Safe-area padding for native app (status bar / notch) */
+html {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 @layer base {
     :root {
         --radius: 0.625rem;

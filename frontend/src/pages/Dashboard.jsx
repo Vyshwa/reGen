@@ -103,7 +103,7 @@ export default function Dashboard({ userProfile }) {
 
   return (
     <div className="bg-background text-foreground flex min-h-svh flex-col">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-[env(safe-area-inset-top,0px)] z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-16 items-center gap-3 px-3 md:px-6 flex-wrap md:flex-nowrap">
           <div className="flex items-center gap-3">
             <button

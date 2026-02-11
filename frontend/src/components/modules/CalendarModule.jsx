@@ -36,7 +36,7 @@ export default function CalendarModule({ userProfile }) {
   const isMobile = useIsMobile();
   const touchStartX = useRef(null);
 
-  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner');
+  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   const visibleHolidays = useMemo(() => holidays, [holidays]);
   const toIdText = (val) => (typeof val === 'string' ? val : (val?.toText ? val.toText() : String(val)));
   const formatUserLabel = (u) => {

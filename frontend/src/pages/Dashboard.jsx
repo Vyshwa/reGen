@@ -53,7 +53,7 @@ export default function Dashboard({ userProfile }) {
   }, [myNotifications]);
 
   const isAdmin = userProfile.role.hasOwnProperty('admin');
-  const isOwner = userProfile.role.hasOwnProperty('owner');
+  const isOwner = userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   const isStaff = userProfile.role.hasOwnProperty('staff') || userProfile.role.hasOwnProperty('intern') || userProfile.role.hasOwnProperty('freelancer');
 
   const handleLogout = async () => {

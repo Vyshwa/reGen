@@ -394,7 +394,7 @@ export const createMockActor = (identity) => {
     saveCompanyInfo: async () => {},
     isCallerAdmin: async () => {
         const profile = await createMockActor(identity).getCallerUserProfile();
-        return profile?.role.hasOwnProperty('admin') || false;
+        return profile?.role.hasOwnProperty('admin') || profile?.role.hasOwnProperty('param') || false;
     },
   };
 };

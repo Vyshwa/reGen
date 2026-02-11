@@ -21,7 +21,7 @@ import { Principal } from '@dfinity/principal';
 
 export default function PaymentsModule({ userProfile }) {
   const { identity } = useCustomAuth();
-  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner');
+  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   
   const { data: allPayments = [] } = useGetAllPayments();
   const { data: userPayments = [] } = useGetUserPayments(identity?.getPrincipal() || null);

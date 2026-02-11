@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 
 export default function ScrumModule({ userProfile }) {
   const { identity } = useCustomAuth();
-  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner');
+  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   const isStaff = userProfile.role.hasOwnProperty('staff') || userProfile.role.hasOwnProperty('intern') || userProfile.role.hasOwnProperty('freelancer');
 
   const currentUserId = userProfile.userId || userProfile.id || identity?.getPrincipal() || null;

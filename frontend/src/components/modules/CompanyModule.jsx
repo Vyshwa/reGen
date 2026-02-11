@@ -27,7 +27,7 @@ export default function CompanyModule({ userProfile }) {
   });
 
   const isAdmin = userProfile.role.hasOwnProperty('admin');
-  const isOwner = userProfile.role.hasOwnProperty('owner');
+  const isOwner = userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
 
   useEffect(() => {
     if (companyInfo) {

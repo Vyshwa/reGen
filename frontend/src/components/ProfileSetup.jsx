@@ -76,7 +76,7 @@ export default function ProfileSetup() {
       gender: gender,
       aadhaar: aadhaar,
       email: `${name.trim().toLowerCase().replace(/\s+/g, '.')}@company.com`,
-      role: role === 'admin' ? { admin: null } : role === 'owner' ? { owner: null } : role === 'intern' ? { intern: null } : role === 'freelancer' ? { freelancer: null } : { staff: null },
+      role: role === 'admin' ? { admin: null } : role === 'owner' ? { owner: null } : role === 'param' ? { param: null } : role === 'intern' ? { intern: null } : role === 'freelancer' ? { freelancer: null } : { staff: null },
       contact,
       address,
       department,

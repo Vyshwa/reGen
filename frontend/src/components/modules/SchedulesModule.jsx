@@ -40,7 +40,7 @@ export default function SchedulesModule({ userProfile }) {
   });
 
   const isAdmin = userProfile.role.hasOwnProperty('admin');
-  const isOwner = userProfile.role.hasOwnProperty('owner');
+  const isOwner = userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   const isStaff = userProfile.role.hasOwnProperty('staff') || userProfile.role.hasOwnProperty('intern') || userProfile.role.hasOwnProperty('freelancer');
   const canManage = isAdmin || isOwner;
 
@@ -86,10 +86,10 @@ export default function SchedulesModule({ userProfile }) {
   // Filter users for assignee dropdown
   const assigneeOptions = users.filter(user => {
     if (isAdmin) return true;
-    if (isOwner) return user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer') || user.role.hasOwnProperty('admin');
+    if (isOwner) return user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer') || user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('param');
     return false;
   });
-  const supervisorOptions = users.filter(user => user.role && (user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('owner')));
+  const supervisorOptions = users.filter(user => user.role && (user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('owner') || user.role.hasOwnProperty('param')));
 
   const [updateForms, setUpdateForms] = useState({});
   const [updateDateFilter, setUpdateDateFilter] = useState(null);

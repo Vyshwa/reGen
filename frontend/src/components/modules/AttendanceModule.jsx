@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 
 export default function AttendanceModule({ userProfile }) {
   const { identity } = useCustomAuth();
-  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner');
+  const isAdmin = userProfile.role.hasOwnProperty('admin') || userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   
   const staffIdObj = userProfile.userId || userProfile.id || identity?.getPrincipal() || null;
   const staffIdStr = typeof staffIdObj === 'string' ? staffIdObj : (staffIdObj?.toText ? staffIdObj.toText() : String(staffIdObj || ''));

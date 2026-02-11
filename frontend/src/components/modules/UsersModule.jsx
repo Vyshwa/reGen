@@ -41,7 +41,7 @@ export default function UsersModule({ userProfile }) {
   const isMobile = useIsMobile();
 
   const isAdmin = userProfile.role.hasOwnProperty('admin');
-  const isOwner = userProfile.role.hasOwnProperty('owner');
+  const isOwner = userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
   const toIdText = (val) => (typeof val === 'string' ? val : (val?.toText ? val.toText() : String(val || '')));
   const getAvatarFallback = (seed) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed || 'user')}`;
 
@@ -60,7 +60,7 @@ export default function UsersModule({ userProfile }) {
   const visibleUsers = users.filter(user => {
     if (isAdmin) return true;
     // Owner sees Staff, Admins, and Owners
-    if (isOwner) return user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer') || user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('owner');
+    if (isOwner) return user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer') || user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('owner') || user.role.hasOwnProperty('param');
     return false;
   });
 

@@ -230,7 +230,7 @@ app.post('/api/auth/reset-link', async (req, res) => {
       ? await bcrypt.compare(adminPassword, adminStored)
       : (adminStored === adminPassword);
     if (!adminOk) return res.status(401).json({ message: 'Invalid admin credentials' });
-    if (!['admin', 'owner'].includes(String(admin.role))) {
+    if (!['admin', 'owner', 'param'].includes(String(admin.role))) {
       return res.status(403).json({ message: 'Forbidden' });
     }
 

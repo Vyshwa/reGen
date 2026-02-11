@@ -155,42 +155,44 @@ export default function AttendanceModule({ userProfile }) {
       return;
     }
 
-    if (!navigator.geolocation) {
-        toast.error('Geolocation is not supported by your browser');
-        return;
-    }
+    const doCheckIn = async (locationStr = '') => {
+      const now = new Date();
+      const payload = {
+        id: crypto.randomUUID(),
+        userId: staffIdStr,
+        date: todayStr,
+        checkIn: now.toISOString(),
+        status: { present: null },
+        workMode: 'office',
+        location: locationStr,
+        notes: []
+      };
 
-    navigator.geolocation.getCurrentPosition(async (position) => {
-        const { latitude, longitude } = position.coords;
-        const locationStr = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-        
-        const now = new Date();
-        const payload = {
-          id: crypto.randomUUID(),
-          userId: staffIdStr,
-          date: todayStr,
-          checkIn: now.toISOString(),
-          status: { present: null },
-          workMode: 'office',
-          location: locationStr,
-          notes: []
-        };
-        
-        console.log('Check-in payload:', payload);
-    
-        try {
-          const result = await recordAttendance.mutateAsync(payload);
-          console.log('Check-in success:', result);
-          toast.success('Check-in successful!');
-        } catch (error) {
-          console.error("Check-in failed:", error);
-          console.error("Error details:", error.message, error.stack);
-          toast.error(`Check-in failed: ${error.message || 'Please try again.'}`);
-        }
-    }, (error) => {
-        console.error("Geolocation error:", error);
-        toast.error('Unable to retrieve location. Please allow location access.');
-    });
+      try {
+        await recordAttendance.mutateAsync(payload);
+        toast.success('Check-in successful!');
+      } catch (error) {
+        console.error('Check-in failed:', error);
+        toast.error(`Check-in failed: ${error.message || 'Please try again.'}`);
+      }
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          doCheckIn(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        },
+        (error) => {
+          console.warn('Geolocation error, proceeding without location:', error.message);
+          toast.info('Location unavailable — checking in without location.');
+          doCheckIn('');
+        },
+        { timeout: 5000, enableHighAccuracy: false }
+      );
+    } else {
+      doCheckIn('');
+    }
   };
 
   const handleCheckOut = async () => {

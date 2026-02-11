@@ -368,7 +368,7 @@ const isSuperAdmin = async (req) => {
   const userId = req.headers['x-user-id'];
   if (!userId) return false;
   const user = await User.findOne({ $or: [{ userId }, { username: userId }] });
-  return user && user.role === 'owner';
+  return user && user.role === 'param';
 };
 
 app.post('/api/deploy/git-pull', async (req, res) => {

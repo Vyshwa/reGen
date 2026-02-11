@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
   dateOfBirth: { type: String },
   gender: { type: String },
   aadhaar: { type: String },
-  role: { type: String, enum: ['admin', 'owner', 'staff', 'intern', 'freelancer'], required: true },
+  role: { type: String, enum: ['admin', 'owner', 'param', 'staff', 'intern', 'freelancer'], required: true },
   email: { type: String },
   phone: { type: String },
   department: { type: String },

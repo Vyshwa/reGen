@@ -1,0 +1,594 @@
+import { useState } from 'react';
+import { useGetAllUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks/useQueries';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Plus, Pencil, Trash2, Camera, Link2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Principal } from '@dfinity/principal';
+import { Ed25519KeyIdentity } from '@dfinity/identity';
+import { useIsMobile } from '../../hooks/use-mobile';
+
+export default function UsersModule({ userProfile }) {
+  const { data: users = [], isLoading } = useGetAllUsers();
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [formData, setFormData] = useState({
+    principalId: '',
+    username: '',
+    password: '1234',
+    firstName: '',
+    lastName: '',
+    department: '',
+    designation: '',
+    salary: '',
+    role: 'staff',
+    avatar: '',
+    joiningDate: '',
+    dateOfBirth: '',
+  });
+
+  const [previewUrl, setPreviewUrl] = useState('');
+
+  const isMobile = useIsMobile();
+
+  const isAdmin = userProfile.role.hasOwnProperty('admin');
+  const isOwner = userProfile.role.hasOwnProperty('owner');
+  const toIdText = (val) => (typeof val === 'string' ? val : (val?.toText ? val.toText() : String(val || '')));
+  const getAvatarFallback = (seed) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed || 'user')}`;
+
+  // Access Control: Only Admin and Owner can access
+  if (!isAdmin && !isOwner) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-center text-muted-foreground">You don't have permission to access this module.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Filter users based on role
+  const visibleUsers = users.filter(user => {
+    if (isAdmin) return true;
+    // Owner sees Staff, Admins, and Owners
+    if (isOwner) return user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer') || user.role.hasOwnProperty('admin') || user.role.hasOwnProperty('owner');
+    return false;
+  });
+
+  // Role Options based on current user role
+  const roleOptions = [
+    { value: 'staff', label: 'Staff' },
+    { value: 'intern', label: 'Intern' },
+    { value: 'freelancer', label: 'Freelancer' },
+    { value: 'owner', label: 'Owner' },
+    { value: 'admin', label: 'Admin' },
+  ];
+
+  const computeAge = (dateOfBirth) => {
+    if (!dateOfBirth) return null;
+    const dob = new Date(`${dateOfBirth}T00:00:00`);
+    if (Number.isNaN(dob.getTime())) return null;
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    const m = now.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age -= 1;
+    return age;
+  };
+
+  const normalizeDateForInput = (value) => {
+    if (!value) return '';
+    const s = String(value).trim();
+    if (!s) return '';
+    const isoMatch = s.match(/^(\d{4})\D(\d{2})\D(\d{2})/);
+    if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    const dmyMatch = s.match(/^(\d{2})\D(\d{2})\D(\d{4})$/);
+    if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return '';
+  };
+
+  const handleGenerateResetLink = async (user) => {
+    try {
+      const adminIdentifier = localStorage.getItem('current_user') || toIdText(userProfile.id || userProfile.userId);
+      const adminPassword = window.prompt('Enter your password to generate reset link');
+      if (!adminPassword) return;
+      const targetIdentifier = toIdText(user.userId || user.id || user.username);
+      const res = await fetch('/api/auth/reset-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminIdentifier, adminPassword, targetIdentifier })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Failed to generate reset link' }));
+        throw new Error(err.message || 'Failed to generate reset link');
+      }
+      const data = await res.json();
+      const link = data.link;
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success('Reset link copied to clipboard');
+      } catch {
+        window.prompt('Copy reset link', link);
+      }
+    } catch (e) {
+      toast.error(e.message || 'Failed to generate reset link');
+    }
+  };
+
+  const handleOpenDialog = (user) => {
+    if (user) {
+      setEditingUser(user);
+      const fullName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+      const [fn, ...rest] = (fullName || '').split(' ');
+      const ln = rest.join(' ');
+      setFormData({
+        principalId: user.userId?.toText ? user.userId.toText() : (user.userId ? String(user.userId) : (user.id?.toText ? user.id.toText() : String(user.id))),
+        username: user.username,
+        password: '',
+        firstName: fn || '',
+        lastName: ln || '',
+        department: user.department || '',
+        designation: user.designation || '',
+        salary: user.salary?.toString() || '',
+        role: typeof user.role === 'string' ? user.role : Object.keys(user.role)[0],
+        avatar: user.avatar || '',
+        joiningDate: normalizeDateForInput(user.joiningDate),
+        dateOfBirth: normalizeDateForInput(user.dateOfBirth),
+      });
+      setPreviewUrl(user.avatar || '');
+    } else {
+      setEditingUser(null);
+      setFormData({
+        principalId: '',
+        username: '',
+        password: '1234',
+        firstName: '',
+        lastName: '',
+        department: '',
+        designation: '',
+        salary: '',
+        role: 'staff',
+        avatar: '',
+        joiningDate: '',
+        dateOfBirth: '',
+      });
+      setPreviewUrl('');
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 4 * 1024 * 1024) {
+        toast.error('Image size should be less than 4MB');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result;
+        setFormData(prev => ({ ...prev, avatar: result }));
+        setPreviewUrl(result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!editingUser) {
+      const loginId = formData.principalId.trim();
+      const username = formData.username.trim();
+      if (!loginId || !username) {
+        toast.error('Staff ID and username are required');
+        return;
+      }
+    }
+
+    if (!editingUser) {
+      const trimmed = formData.principalId.trim();
+      // Format validation: 3 letters, hyphen, numbers (e.g., KCT-20251001)
+      if (!/^[A-Za-z]{3}-\d+$/.test(trimmed)) {
+        toast.error('Staff ID must be in format ABC-12345678 (3 letters, hyphen, numbers)');
+        return;
+      }
+    }
+
+    // Helper to create a fake principal object for custom IDs
+    const createPrincipalFromInput = (input) => {
+      const trimmed = input.trim();
+      return {
+        toText: () => trimmed,
+        _isPrincipal: false
+      };
+    };
+
+    try {
+      const user = {
+        userId: editingUser ? (editingUser.userId || editingUser.id) : createPrincipalFromInput(formData.principalId),
+        username: formData.username,
+        password: formData.password || undefined,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+        department: formData.department,
+        designation: formData.designation,
+        salary: formData.salary ? formData.salary.toString() : undefined, // Convert to string to avoid serialization error
+        role: { [formData.role]: null },
+        avatar: formData.avatar,
+        joiningDate: formData.joiningDate || undefined,
+        dateOfBirth: formData.dateOfBirth || undefined,
+      };
+
+      if (editingUser) {
+        await updateUser.mutateAsync(user);
+        toast.success('User updated successfully');
+      } else {
+        await createUser.mutateAsync(user);
+        toast.success('User created successfully');
+      }
+
+      setIsDialogOpen(false);
+    } catch (error) {
+      toast.error('Failed to save user');
+      console.error(error);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (confirm('Are you sure you want to delete this user?')) {
+      try {
+        await deleteUser.mutateAsync(id);
+        toast.success('User deleted successfully');
+      } catch (error) {
+        toast.error('Failed to delete user');
+        console.error(error);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">{isOwner ? 'Staff Management' : 'User Management'}</h2>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => handleOpenDialog()}>
+              <Plus className="mr-2 h-4 w-4" />
+              {isOwner ? 'Add User' : 'Add User'}
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[85vh] w-[95vw] max-w-xl overflow-y-auto md:max-h-[80vh] md:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-base md:text-lg">{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="flex flex-col items-center gap-3">
+                <div className="relative">
+                  <div className="h-20 w-20 md:h-24 md:w-24 rounded-full overflow-hidden border-2 border-muted bg-muted">
+                    {previewUrl ? (
+                      <img src={previewUrl} alt="Preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-muted text-muted-foreground">
+                        <Camera className="h-8 w-8" />
+                      </div>
+                    )}
+                  </div>
+                  <Label
+                    htmlFor="avatar-upload"
+                    className="absolute bottom-0 right-0 p-1 bg-primary text-primary-foreground rounded-full cursor-pointer hover:bg-primary/90 transition-colors shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="sr-only">Upload avatar</span>
+                  </Label>
+                  <Input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                </div>
+              </div>
+              {!editingUser && (
+                <div className="space-y-2">
+                  <Label htmlFor="principalId">Staff ID *</Label>
+                  <Input
+                    id="principalId"
+                    tabIndex={1}
+                    value={formData.principalId}
+                    onChange={(e) => setFormData({ ...formData, principalId: e.target.value })}
+                    placeholder="e.g., KCT-20251001"
+                    required
+                  />
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`space-y-2 ${editingUser ? 'md:col-span-2' : ''}`}>
+                  <Label htmlFor="username">Username *</Label>
+                  <Input
+                    id="username"
+                    tabIndex={2}
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    required
+                  />
+                </div>
+                {!editingUser && (
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password *</Label>
+                    <Input
+                      id="password"
+                      tabIndex={3}
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      disabled
+                    />
+                    <p className="text-xs text-muted-foreground">Default password is 1234. User must change after first login.</p>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    tabIndex={4}
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    tabIndex={5}
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Input
+                    id="department"
+                    tabIndex={6}
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="designation">Designation</Label>
+                  <Input
+                    id="designation"
+                    tabIndex={7}
+                    value={formData.designation}
+                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Input
+                    id="dateOfBirth"
+                    tabIndex={8}
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="joiningDate">Joining Date</Label>
+                  <Input
+                    id="joiningDate"
+                    tabIndex={9}
+                    type="date"
+                    value={formData.joiningDate}
+                    onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Select
+                    value={formData.role}
+                    onValueChange={(value) => setFormData({ ...formData, role: value })}
+                  >
+                    <SelectTrigger tabIndex={10}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roleOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="salary">Salary</Label>
+                  <Input
+                    id="salary"
+                    tabIndex={11}
+                    type="number"
+                    value={formData.salary}
+                    onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                  />
+                </div>
+              </div>
+              <Button type="submit" tabIndex={12} className="w-full" disabled={createUser.isPending || updateUser.isPending}>
+                {(createUser.isPending || updateUser.isPending) ? 'Saving...' : 'Save User'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{isOwner ? 'My Staff' : 'All Users'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-center py-8 text-muted-foreground">Loading users...</p>
+          ) : visibleUsers.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No users found</p>
+          ) : (
+            <>
+              <div className="space-y-3 md:hidden">
+                {visibleUsers.map((user) => {
+                  const uid = user.userId?.toText ? user.userId.toText() : String(user.userId || user.id);
+                  const name = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+                  return (
+                    <Card key={uid} className="border border-border shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 flex-shrink-0 rounded-full bg-muted overflow-hidden">
+                            <img
+                              src={user.avatar || getAvatarFallback(user.username)}
+                              alt="Profile"
+                              className="h-full w-full object-cover"
+                              onError={(e) => { e.currentTarget.src = getAvatarFallback(user.username); }}
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-tight truncate">{name || '--'}</p>
+                                <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+                              </div>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] capitalize text-foreground/80">
+                                {Object.keys(user.role)[0]}
+                              </span>
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wide">Department</span>
+                                <span className="text-foreground/90">{user.department || '--'}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wide">Designation</span>
+                                <span className="text-foreground/90">{user.designation || '--'}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wide">DOB</span>
+                                <span className="text-foreground/90">{user.dateOfBirth || '--'}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wide">Salary</span>
+                                <span className="text-foreground/90">₹{user.salary?.toString() || '--'}</span>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-end gap-2">
+                              <Button variant="ghost" size="icon" onClick={() => handleGenerateResetLink(user)}>
+                                <Link2 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(user)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(user.userId || user.id)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Avatar</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Designation</TableHead>
+                      <TableHead>Date of Birth</TableHead>
+                      <TableHead>Age</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Salary</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                {visibleUsers.map((user) => (
+                  <TableRow key={(user.userId?.toText ? user.userId.toText() : String(user.userId || user.id))} className="hover:bg-accent">
+                    <TableCell>
+                      <div className="h-8 w-8 rounded-full bg-muted overflow-hidden">
+                        <img
+                          src={user.avatar || getAvatarFallback(user.username)}
+                          alt="Profile"
+                          className="h-full w-full object-cover"
+                          onError={(e) => { e.currentTarget.src = getAvatarFallback(user.username); }}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">{user.name || `${user.firstName || ''} ${user.lastName || ''}`}</TableCell>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell>{user.department}</TableCell>
+                    <TableCell>{user.designation}</TableCell>
+                    <TableCell>{user.dateOfBirth || '--'}</TableCell>
+                    <TableCell>{(user.age ?? computeAge(user.dateOfBirth)) ?? '--'}</TableCell>
+                    <TableCell>
+                      <span className="capitalize">{Object.keys(user.role)[0]}</span>
+                    </TableCell>
+                    <TableCell>₹{user.salary?.toString()}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleGenerateResetLink(user)}
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenDialog(user)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(user.userId || user.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -1,0 +1,10 @@
+node_modules/
+frontend/dist/
+frontend/node_modules/
+server/node_modules/
+server/.env
+uploads/
+frontend/uploads/
+frontend/assets/
+*.log
+.DS_Store

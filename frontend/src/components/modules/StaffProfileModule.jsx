@@ -56,7 +56,10 @@ export default function StaffProfileModule({ userProfile }) {
   const [deployLog, setDeployLog] = useState('');
 
   const getUserIdHeader = () => {
-    return userProfile.userId?.toText ? userProfile.userId.toText() : (userProfile.id?.toText ? userProfile.id.toText() : String(userProfile.userId || userProfile.id || ''));
+    if (userProfile.username) return userProfile.username;
+    if (userProfile.userId?.toText) return userProfile.userId.toText();
+    if (userProfile.id?.toText) return userProfile.id.toText();
+    return String(userProfile.userId || userProfile.id || '');
   };
 
   const handleGitPull = async () => {

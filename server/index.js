@@ -360,7 +360,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 const execAsync = promisify(exec);
 
-const REPO_DIR = path.resolve(__dirname, '..');
+const REPO_DIR = '/home/vyshwa/web/reGen';
 const LIVE_DIR = '/home/vyshwa/web/regen_live';
 const NGINX_DIR = '/web/regen_live';
 

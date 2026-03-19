@@ -1,0 +1,9 @@
+{
+  "appId": "in.krishub.regen",
+  "appName": "reGen",
+  "webDir": "dist",
+  "server": {
+    "url": "https://regen.krishub.in",
+    "cleartext": false
+  }
+}

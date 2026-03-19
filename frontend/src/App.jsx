@@ -1,0 +1,138 @@
+import { useEffect, useState } from 'react';
+import { useCustomAuth } from './hooks/useCustomAuth';
+import { useGetCallerUserProfile } from './hooks/useQueries';
+import MaintenancePage from './components/MaintenancePage';
+import { ThemeProvider } from 'next-themes';
+import { Toaster } from '@/components/ui/sonner';
+import LoginPage from './pages/LoginPage';
+import Dashboard from './pages/Dashboard';
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
+
+export default function App() {
+  const { identity, isLoggingIn: isInitializing, logout } = useCustomAuth();
+  const { data: userProfile, isLoading: profileLoading, isFetched } = useGetCallerUserProfile();
+  const [isMaintenance, setIsMaintenance] = useState(false);
+
+  useEffect(() => {
+    const checkMaintenance = async () => {
+      try {
+        const resp = await fetch('/api/system/maintenance');
+        if (resp.ok) {
+          const data = await resp.json();
+          setIsMaintenance(data.maintenance);
+        }
+      } catch (e) {
+        console.error("Maintenance check failed", e);
+      }
+    };
+    checkMaintenance();
+    const interval = setInterval(checkMaintenance, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const isSuperAdminPath = window.location.pathname === '/superadmin';
+
+  const isAuthenticated = !!identity;
+  const resetToken = new URLSearchParams(window.location.search).get('resetToken');
+
+  if (isSuperAdminPath) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <SuperAdminDashboard />
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  useEffect(() => {
+    if (resetToken && isAuthenticated) {
+      logout();
+    }
+  }, [resetToken]);
+
+  // Show loading state while initializing
+  if (isInitializing) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <div className="flex h-screen items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+            <p className="text-muted-foreground">Initializing...</p>
+          </div>
+        </div>
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  if (resetToken) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <LoginPage resetToken={resetToken} />
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    if (isMaintenance && !isSuperAdminPath) {
+      return (
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <MaintenancePage />
+          <Toaster />
+        </ThemeProvider>
+      );
+    }
+
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <LoginPage />
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  // Maintenance override for logged in users
+  if (isMaintenance && userProfile?.role !== 'param' && !isSuperAdminPath) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <MaintenancePage />
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  const showDashboard = isAuthenticated && isFetched && !!userProfile;
+
+  // Show loading while fetching profile
+  if (profileLoading || !isFetched) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <div className="flex h-screen items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+            <p className="text-muted-foreground">Loading profile...</p>
+          </div>
+        </div>
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  if (showDashboard) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <Dashboard userProfile={userProfile} />
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  return (
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <LoginPage />
+      <Toaster />
+    </ThemeProvider>
+  );
+}

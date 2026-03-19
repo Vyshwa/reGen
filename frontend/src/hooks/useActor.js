@@ -412,6 +412,8 @@ export const createHttpActor = (identity) => {
   const principalId = localStorage.getItem('current_user') || identity.getPrincipal().toText();
   const API_BASE = '/api';
 
+  const getAuthToken = () => localStorage.getItem('auth_token');
+
     const toIsoDate = (value) => {
         if (!value) return undefined;
         if (typeof value === 'string') {
@@ -433,7 +435,8 @@ export const createHttpActor = (identity) => {
 
   const headers = {
     'Content-Type': 'application/json',
-    'x-user-id': principalId
+    'x-user-id': principalId,
+    ...(getAuthToken() ? { 'Authorization': `Bearer ${getAuthToken()}` } : {})
   };
 
   const handleResponse = async (res) => {
@@ -789,6 +792,13 @@ export const createHttpActor = (identity) => {
         return handleResponse(await fetch(`${API_BASE}/messages/${id}`, {
             method: 'DELETE',
             headers
+        }));
+    },
+    editMessage: async (id, content) => {
+        return handleResponse(await fetch(`${API_BASE}/messages/${id}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ content })
         }));
     },
     getAllMeetingNotes: async () => {

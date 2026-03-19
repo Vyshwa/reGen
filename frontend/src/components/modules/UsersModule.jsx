@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useGetAllUsers, useCreateUser, useUpdateUser, useDeleteUser, useGetAllCompanies } from '../../hooks/useQueries';
+import { useGetAllUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks/useQueries';
+import { authFetch } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -19,7 +20,6 @@ export default function UsersModule({ userProfile }) {
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
-  const { data: companies = [] } = useGetAllCompanies();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -36,7 +36,6 @@ export default function UsersModule({ userProfile }) {
     avatar: '',
     joiningDate: '',
     dateOfBirth: '',
-    company: '',
     gender: '',
     address: '',
     phone: '',
@@ -163,9 +162,9 @@ export default function UsersModule({ userProfile }) {
       if (!confirmed) return;
       const adminId = userProfile.username || localStorage.getItem('current_user') || toIdText(userProfile.id || userProfile.userId);
       const targetIdentifier = toIdText(user.userId || user.id || user.username);
-      const res = await fetch('/api/auth/admin-reset-password', {
+      const res = await authFetch('/api/auth/admin-reset-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': adminId },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetIdentifier })
       });
       if (!res.ok) {
@@ -198,7 +197,6 @@ export default function UsersModule({ userProfile }) {
         avatar: user.avatar || '',
         joiningDate: normalizeDateForInput(user.joiningDate),
         dateOfBirth: normalizeDateForInput(user.dateOfBirth),
-        company: user.company || '',
         gender: user.gender || '',
         address: user.address || '',
         phone: user.phone || '',
@@ -219,7 +217,6 @@ export default function UsersModule({ userProfile }) {
         avatar: '',
         joiningDate: '',
         dateOfBirth: '',
-        company: '',
         gender: '',
         address: '',
         phone: '',
@@ -292,7 +289,6 @@ export default function UsersModule({ userProfile }) {
         avatar: formData.avatar,
         joiningDate: formData.joiningDate || undefined,
         dateOfBirth: formData.dateOfBirth || undefined,
-        company: formData.company || undefined,
         gender: formData.gender || undefined,
         address: formData.address || undefined,
         phone: formData.phone || undefined,
@@ -477,28 +473,6 @@ export default function UsersModule({ userProfile }) {
                     value={formData.joiningDate}
                     onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company">Company *</Label>
-                  <Select
-                    value={formData.company}
-                    onValueChange={(value) => setFormData({ ...formData, company: value })}
-                  >
-                    <SelectTrigger tabIndex={10}>
-                      <SelectValue placeholder="Select Company" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companies.length === 0 ? (
-                        <SelectItem value="none" disabled>No companies found</SelectItem>
-                      ) : (
-                        companies.map((co) => (
-                          <SelectItem key={co.id || co._id} value={co.name}>
-                            {co.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="gender">Gender *</Label>

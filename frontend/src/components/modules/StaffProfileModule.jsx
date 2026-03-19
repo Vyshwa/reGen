@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Camera, Upload, GitBranch, Rocket, Loader2 } from 'lucide-react';
+import { Camera, Upload } from 'lucide-react';
+import { authFetch } from '@/lib/utils';
 
 export default function StaffProfileModule({ userProfile }) {
   const normalizeDateForInput = (value) => {
@@ -49,58 +50,7 @@ export default function StaffProfileModule({ userProfile }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // SuperAdmin deploy state — any user with role 'param' is SuperAdmin
-  const isSuperAdmin = userProfile.role.hasOwnProperty('param');
-  const [isPulling, setIsPulling] = useState(false);
-  const [isDeploying, setIsDeploying] = useState(false);
-  const [deployLog, setDeployLog] = useState('');
 
-  const getUserIdHeader = () => {
-    if (userProfile.username) return userProfile.username;
-    if (userProfile.userId?.toText) return userProfile.userId.toText();
-    if (userProfile.id?.toText) return userProfile.id.toText();
-    return String(userProfile.userId || userProfile.id || '');
-  };
-
-  const handleGitPull = async () => {
-    setIsPulling(true);
-    setDeployLog('');
-    try {
-      const res = await fetch('/api/deploy/git-pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': getUserIdHeader() }
-      });
-      const data = await res.json();
-      setDeployLog(data.output || data.message || 'Done');
-      if (data.success) toast.success('Git pull successful');
-      else toast.error(data.message || 'Git pull failed');
-    } catch (e) {
-      toast.error('Git pull failed: ' + e.message);
-      setDeployLog('Error: ' + e.message);
-    } finally {
-      setIsPulling(false);
-    }
-  };
-
-  const handleRebuildDeploy = async () => {
-    setIsDeploying(true);
-    setDeployLog('');
-    try {
-      const res = await fetch('/api/deploy/rebuild', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': getUserIdHeader() }
-      });
-      const data = await res.json();
-      setDeployLog(data.output || data.message || 'Done');
-      if (data.success) toast.success('Rebuild & deploy successful! Refresh to see changes.');
-      else toast.error(data.message || 'Rebuild failed');
-    } catch (e) {
-      toast.error('Rebuild failed: ' + e.message);
-      setDeployLog('Error: ' + e.message);
-    } finally {
-      setIsDeploying(false);
-    }
-  };
 
   useEffect(() => {
     if (userProfile.name !== undefined) setName(userProfile.name || '');
@@ -134,7 +84,7 @@ export default function StaffProfileModule({ userProfile }) {
       if (!uid) throw new Error('User ID not found');
       const formData = new FormData();
       formData.append('avatar', file);
-      const res = await fetch(`/api/users/${uid}/avatar`, {
+      const res = await authFetch(`/api/users/${uid}/avatar`, {
         method: 'POST',
         body: formData
       });
@@ -206,7 +156,7 @@ export default function StaffProfileModule({ userProfile }) {
     setIsChangingPassword(true);
     try {
       const identifier = localStorage.getItem('current_user') || userProfile.username;
-      const res = await fetch('/api/auth/change-password', {
+      const res = await authFetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, currentPassword, newPassword })
@@ -467,44 +417,6 @@ export default function StaffProfileModule({ userProfile }) {
         </CardContent>
       </Card>
 
-      {/* SuperAdmin Deploy Panel */}
-      {isSuperAdmin && (
-        <Card className="border-2 border-amber-500/50 bg-amber-50/30 dark:bg-amber-950/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-              <Rocket className="h-5 w-5" />
-              Deployment Controls
-            </CardTitle>
-            <CardDescription>SuperAdmin only — pull latest code and rebuild the live site.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                onClick={handleGitPull}
-                disabled={isPulling || isDeploying}
-                variant="outline"
-                className="flex-1 h-14 border-blue-500/50 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
-              >
-                {isPulling ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GitBranch className="h-5 w-5 mr-2" />}
-                {isPulling ? 'Pulling...' : 'Git Code Pull'}
-              </Button>
-              <Button
-                onClick={handleRebuildDeploy}
-                disabled={isPulling || isDeploying}
-                className="flex-1 h-14 bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                {isDeploying ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Rocket className="h-5 w-5 mr-2" />}
-                {isDeploying ? 'Building & Deploying...' : 'Rebuild & Deploy'}
-              </Button>
-            </div>
-            {deployLog && (
-              <pre className="mt-3 p-3 rounded-lg bg-gray-900 text-green-400 text-xs font-mono overflow-x-auto max-h-48 whitespace-pre-wrap">
-                {deployLog}
-              </pre>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

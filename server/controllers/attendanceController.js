@@ -1,9 +1,14 @@
 import Attendance from '../models/Attendance.js';
+import { resolveCompanyId } from '../utils/resolveCompanyId.js';
+import { emitToCompany } from '../socket.js';
 
 export const recordAttendance = async (req, res) => {
   try {
-    const attendance = new Attendance(req.body);
+    const body = { ...req.body };
+    body.companyId = await resolveCompanyId(req, body);
+    const attendance = new Attendance(body);
     await attendance.save();
+    emitToCompany('attendance:change', attendance.companyId, { action: 'create', id: attendance.id });
     res.status(201).json(attendance);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -12,7 +17,8 @@ export const recordAttendance = async (req, res) => {
 
 export const getAllAttendance = async (req, res) => {
   try {
-    const attendance = await Attendance.find();
+    const filter = req.companyId ? { companyId: req.companyId } : {};
+    const attendance = await Attendance.find(filter);
     res.status(200).json(attendance);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -21,7 +27,9 @@ export const getAllAttendance = async (req, res) => {
 
 export const getUserAttendance = async (req, res) => {
   try {
-    const attendance = await Attendance.find({ userId: req.params.userId });
+    const filter = { userId: req.params.userId };
+    if (req.companyId) filter.companyId = req.companyId;
+    const attendance = await Attendance.find(filter);
     res.status(200).json(attendance);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -31,8 +39,11 @@ export const getUserAttendance = async (req, res) => {
 export const updateAttendance = async (req, res) => {
   try {
     const id = req.body.id || req.params.id;
-    const attendance = await Attendance.findOneAndUpdate({ id }, req.body, { new: true });
+    const filter = { id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const attendance = await Attendance.findOneAndUpdate(filter, req.body, { new: true });
     if (!attendance) return res.status(404).json({ message: 'Attendance not found' });
+    emitToCompany('attendance:change', attendance.companyId, { action: 'update', id: attendance.id });
     res.status(200).json(attendance);
   } catch (error) {
     res.status(400).json({ message: error.message });

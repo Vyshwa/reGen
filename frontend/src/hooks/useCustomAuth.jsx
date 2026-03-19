@@ -83,9 +83,6 @@ export const CustomAuthProvider = ({ children }) => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     if (!username || !password) {
-        // Fallback for legacy or anonymous login if needed, or just throw
-        // For now, let's just create a temp identity if no args (backward compatibility)
-        // But the user wants validation.
         setIsLoggingIn(false);
         throw new Error("Username and password are required");
     }
@@ -106,6 +103,10 @@ export const CustomAuthProvider = ({ children }) => {
       const backendUser = await response.json();
       if (backendUser?.userId) {
         sessionKey = backendUser.userId;
+      }
+      // Store JWT token
+      if (backendUser?.token) {
+        localStorage.setItem('auth_token', backendUser.token);
       }
     } catch (e) {
       setIsLoggingIn(false);
@@ -135,12 +136,15 @@ export const CustomAuthProvider = ({ children }) => {
 
   const logout = async () => {
     localStorage.removeItem('current_user');
+    localStorage.removeItem('auth_token');
     setIdentity(null);
     setIsAuthenticated(false);
   };
 
+  const getToken = () => localStorage.getItem('auth_token');
+
   return (
-    <CustomAuthContext.Provider value={{ identity, isAuthenticated, login, register, logout, isLoggingIn }}>
+    <CustomAuthContext.Provider value={{ identity, isAuthenticated, login, register, logout, isLoggingIn, getToken }}>
       {children}
     </CustomAuthContext.Provider>
   );

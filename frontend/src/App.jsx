@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useCustomAuth } from './hooks/useCustomAuth';
 import { useGetCallerUserProfile } from './hooks/useQueries';
+import { useSocket } from './hooks/useSocket';
 import MaintenancePage from './components/MaintenancePage';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
@@ -12,6 +13,9 @@ export default function App() {
   const { identity, isLoggingIn: isInitializing, logout } = useCustomAuth();
   const { data: userProfile, isLoading: profileLoading, isFetched } = useGetCallerUserProfile();
   const [isMaintenance, setIsMaintenance] = useState(false);
+
+  // Real-time data sync via WebSocket (connects when auth_token exists)
+  useSocket();
 
   useEffect(() => {
     const checkMaintenance = async () => {

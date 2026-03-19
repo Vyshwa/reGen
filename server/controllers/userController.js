@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { resolveCompanyId } from '../utils/resolveCompanyId.js';
 
 const DEFAULT_PASSWORD = '1234';
 
@@ -130,6 +131,8 @@ export const createUser = async (req, res) => {
     }
     // Remove skills if present (no longer supported)
     delete body.skills;
+    // Stamp companyId for data isolation
+    body.companyId = await resolveCompanyId(req, body);
     if (body.avatar !== undefined) {
       body.avatar = await normalizeAvatarInput(body.avatar, body.userId || body.username || body.name || 'user');
     } else {
@@ -146,7 +149,8 @@ export const createUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    const filter = req.companyId ? { companyId: req.companyId } : {};
+    const users = await User.find(filter);
     res.status(200).json(users.map(sanitizeUser));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -155,7 +159,9 @@ export const getAllUsers = async (req, res) => {
 
 export const getUser = async (req, res) => {
   try {
-    const user = await User.findOne({ userId: req.params.id });
+    const filter = { userId: req.params.id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const user = await User.findOne(filter);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(200).json(sanitizeUser(user));
   } catch (error) {
@@ -198,7 +204,9 @@ export const updateUser = async (req, res) => {
     delete body.skills;
 
     // FIND EXISTING USER TO CHECK AVATAR CHANGE
-    const existingUser = await User.findOne({ userId: id });
+    const findFilter = { userId: id };
+    if (req.companyId) findFilter.companyId = req.companyId;
+    const existingUser = await User.findOne(findFilter);
     if (!existingUser) return res.status(404).json({ message: 'User not found' });
 
     if (body.avatar !== undefined && body.avatar !== existingUser.avatar) {
@@ -216,7 +224,9 @@ export const updateUser = async (req, res) => {
       body.lastAvatarUpdate = new Date();
     }
 
-    const user = await User.findOneAndUpdate({ userId: id }, body, { new: true });
+    const updateFilter = { userId: id };
+    if (req.companyId) updateFilter.companyId = req.companyId;
+    const user = await User.findOneAndUpdate(updateFilter, body, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(200).json(sanitizeUser(user));
   } catch (error) {
@@ -226,7 +236,9 @@ export const updateUser = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
   try {
-    const user = await User.findOneAndDelete({ userId: req.params.id });
+    const filter = { userId: req.params.id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const user = await User.findOneAndDelete(filter);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {

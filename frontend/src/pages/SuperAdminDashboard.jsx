@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { authFetch } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,7 @@ import {
 import { 
   Building2, Users, CreditCard, TrendingUp, Settings, ShieldAlert, LogOut, 
   CheckCircle, XCircle, Search, Filter, ShieldCheck, Activity, Database, Plus,
-  UserCog, Lock, Mail, User, Shield, Camera, MapPin
+  UserCog, Lock, Mail, User, Shield, Camera, MapPin, Pencil, Trash2, RefreshCw, Phone, Ban, Unlock, Copy, Download
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import {
@@ -79,15 +80,53 @@ export default function SuperAdminDashboard() {
   const [loginForm, setLoginForm] = useState({ id: '', password: '' });
   const [activeTab, setActiveTab] = useState('dashboard');
   const [profileData, setProfileData] = useState({
-    name: 'Super Admin',
-    email: 'admin@regen.inc',
-    id: 'ADMIN',
-    role: 'System Oversight',
-    avatar: '/superadmin-avatar.jpg'
+    userId: '',
+    name: '',
+    username: '',
+    email: '',
+    phone: '',
+    designation: '',
+    department: '',
+    avatar: '',
+    role: 'param',
   });
   const [dbCompanies, setDbCompanies] = useState([]);
   const [dbUsers, setDbUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Restore session on page load / refresh
+  useEffect(() => {
+    const restoreSession = async () => {
+      const token = localStorage.getItem('sa_auth_token');
+      const saId = localStorage.getItem('active_sa_id');
+      if (!token || !saId) return;
+      try {
+        // Validate token by fetching the user profile
+        const resp = await authFetch(`/api/users/${saId}`);
+        if (!resp.ok) throw new Error('Token invalid');
+        const dbUser = await resp.json();
+        if (dbUser.role !== 'param') throw new Error('Not a superadmin');
+        setProfileData({
+          userId: dbUser.userId,
+          name: dbUser.name || dbUser.username || '',
+          username: dbUser.username || '',
+          email: dbUser.email || '',
+          phone: dbUser.phone || '',
+          designation: dbUser.designation || '',
+          department: dbUser.department || '',
+          avatar: dbUser.avatar || '',
+          role: dbUser.role,
+        });
+        setIsAuthenticated(true);
+      } catch (e) {
+        // Token expired or invalid — clear and show login
+        localStorage.removeItem('sa_auth_token');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('active_sa_id');
+      }
+    };
+    restoreSession();
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -99,8 +138,8 @@ export default function SuperAdminDashboard() {
     setIsLoading(true);
     try {
       const [uResp, cResp] = await Promise.all([
-        fetch('/api/users'),
-        fetch('/api/company')
+        authFetch('/api/users'),
+        authFetch('/api/company')
       ]);
       if (uResp.ok) setDbUsers(await uResp.json());
       if (cResp.ok) {
@@ -130,16 +169,36 @@ export default function SuperAdminDashboard() {
         throw new Error(err.message || 'Verification failed');
       }
       const user = await resp.json();
-      if (['param', 'owner', 'admin'].includes(user.role)) {
-        setIsAuthenticated(true);
-        setProfileData({
-          name: user.name || user.username,
-          email: user.email || (user.userId + '@regen.inc'),
-          id: user.userId,
-          role: user.role === 'param' ? 'Platform Architect' : 'System Admin',
-          avatar: '/superadmin-avatar.jpg' // Permanent brand avatar
-        });
+      if (user.role === 'param') {
+        // Store JWT token for superadmin session
+        if (user.token) {
+          localStorage.setItem('sa_auth_token', user.token);
+          localStorage.setItem('auth_token', user.token);
+        }
         localStorage.setItem('active_sa_id', user.userId);
+        setIsAuthenticated(true);
+        // Load full profile from DB
+        try {
+          const profileResp = await authFetch(`/api/users/${user.userId}`);
+          if (profileResp.ok) {
+            const dbUser = await profileResp.json();
+            if (dbUser.role === 'param') {
+              setProfileData({
+                userId: dbUser.userId,
+                name: dbUser.name || dbUser.username || '',
+                username: dbUser.username || '',
+                email: dbUser.email || '',
+                phone: dbUser.phone || '',
+                designation: dbUser.designation || '',
+                department: dbUser.department || '',
+                avatar: dbUser.avatar || '',
+                role: dbUser.role,
+              });
+            }
+          }
+        } catch (e) {
+          console.error('Failed to load profile from DB', e);
+        }
         toast.success(`Welcome, Super Admin ${user.username}!`);
       } else {
         toast.error('Insufficient privileges');
@@ -221,7 +280,7 @@ export default function SuperAdminDashboard() {
         </nav>
 
         <div className="p-6 border-t border-zinc-800">
-          <Button variant="ghost" className="w-full flex justify-start gap-3 text-zinc-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => setIsAuthenticated(false)}>
+          <Button variant="ghost" className="w-full flex justify-start gap-3 text-zinc-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => { localStorage.removeItem('sa_auth_token'); localStorage.removeItem('auth_token'); localStorage.removeItem('active_sa_id'); setIsAuthenticated(false); }}>
             <LogOut className="w-4 h-4" />
             Sign Out
           </Button>
@@ -275,7 +334,7 @@ export default function SuperAdminDashboard() {
                   </nav>
                   <div className="p-6 border-t border-zinc-800">
                     <SheetClose asChild>
-                      <Button variant="ghost" className="w-full flex justify-start gap-3 text-zinc-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => setIsAuthenticated(false)}>
+                      <Button variant="ghost" className="w-full flex justify-start gap-3 text-zinc-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => { localStorage.removeItem('sa_auth_token'); localStorage.removeItem('auth_token'); localStorage.removeItem('active_sa_id'); setIsAuthenticated(false); }}>
                         <LogOut className="w-4 h-4" />
                         Sign Out
                       </Button>
@@ -293,8 +352,12 @@ export default function SuperAdminDashboard() {
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">System Live</span>
               </div>
-              <div className="bg-zinc-800 h-10 w-10 rounded-xl overflow-hidden border border-zinc-700">
-                 <img src={profileData.avatar} alt="Super Admin" className="w-full h-full object-cover" />
+              <div className="bg-zinc-800 h-10 w-10 rounded-xl overflow-hidden border border-zinc-700 flex items-center justify-center">
+                 {profileData.avatar ? (
+                   <img src={profileData.avatar} alt="Super Admin" className="w-full h-full object-cover" />
+                 ) : (
+                   <User className="w-5 h-5 text-zinc-500" />
+                 )}
               </div>
             </div>
           </header>
@@ -431,7 +494,117 @@ function StatCard({ title, value, icon: Icon, trend, color }) {
 
 function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState(null);
+  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpTarget, setOtpTarget] = useState(null); // company to block/unblock
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [credentialResult, setCredentialResult] = useState(null); // { username, password, emailSent, emailNote }
+  const [credDialogOpen, setCredDialogOpen] = useState(false);
+
+  // Delete with OTP
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteOtpCode, setDeleteOtpCode] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteResult, setDeleteResult] = useState(null);
+
+  // Backups
+  const [backups, setBackups] = useState([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [backupActionDialogOpen, setBackupActionDialogOpen] = useState(false);
+  const [backupActionType, setBackupActionType] = useState(null); // 'download' | 'restore' | 'delete-backup'
+  const [backupActionTarget, setBackupActionTarget] = useState(null);
+  const [backupActionOtp, setBackupActionOtp] = useState('');
+  const [backupActionLoading, setBackupActionLoading] = useState(false);
+
+  const fetchBackups = async () => {
+    setBackupsLoading(true);
+    try {
+      const resp = await authFetch('/api/company/backups');
+      if (resp.ok) setBackups(await resp.json());
+    } catch {} finally { setBackupsLoading(false); }
+  };
+
+  const handleResetOwnerPassword = async (company) => {
+    const ownerId = company.ownerId;
+    if (!ownerId) {
+      toast.error('No owner linked to this company');
+      return;
+    }
+    if (!window.confirm(`Reset password for owner "${ownerId}" of "${company.name}" to default (1234)?`)) return;
+    try {
+      const resp = await authFetch('/api/auth/admin-reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetIdentifier: ownerId })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to reset password');
+      }
+      const data = await resp.json();
+      toast.success(data.message || `Password reset for ${ownerId}`);
+    } catch (err) {
+      toast.error(err.message || 'Reset failed');
+    }
+  };
+
+  const CATEGORY_LABELS = {
+    it: 'IT Solutions',
+    logistics: 'Logistics',
+    manufacturing: 'Manufacturing',
+    retail: 'Retail',
+    healthcare: 'Healthcare',
+    finance: 'Finance',
+    education: 'Education',
+    consulting: 'Consulting',
+    realestate: 'Real Estate',
+    hospitality: 'Hospitality',
+  };
+
+  const getCategoryLabel = (cat) => {
+    if (!cat) return '—';
+    return CATEGORY_LABELS[cat.toLowerCase()] || cat;
+  };
+
+  const openOtpDialog = (company) => {
+    setOtpTarget(company);
+    setOtpCode('');
+    setOtpDialogOpen(true);
+  };
+
+  const handleToggleStatus = async () => {
+    if (!otpTarget || !otpCode.trim()) {
+      toast.error('Please enter the authenticator code');
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const resp = await authFetch(`/api/company/${otpTarget._id}/toggle-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode: otpCode.trim() })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to update status');
+      }
+      const updated = await resp.json();
+      toast.success(`Company ${updated.status === 'blocked' ? 'blocked' : 'unblocked'} successfully`);
+      setOtpDialogOpen(false);
+      setOtpTarget(null);
+      setOtpCode('');
+      onRefresh();
+    } catch (err) {
+      toast.error(err.message || 'Operation failed');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const emptyForm = {
     gst: '',
     name: '',
     phoneNumber: '',
@@ -442,14 +615,164 @@ function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
     city: '',
     state: '',
     zip: ''
-  });
+  };
+  const [formData, setFormData] = useState(emptyForm);
+  const [editFormData, setEditFormData] = useState(emptyForm);
   const [isValidating, setIsValidating] = useState(false);
+  const [localSearch, setLocalSearch] = useState(searchTerm || '');
 
-  const filtered = dbCompanies.filter(co => 
-    !searchTerm || 
-    co.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    co._id?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = dbCompanies.filter(co => {
+    const term = localSearch.toLowerCase();
+    return !term || 
+      co.name?.toLowerCase().includes(term) || 
+      co._id?.toLowerCase().includes(term) ||
+      co.category?.toLowerCase().includes(term) ||
+      co.city?.toLowerCase().includes(term);
+  });
+
+  const openEdit = (company) => {
+    setEditingCompany(company);
+    setEditFormData({
+      gst: company.gst || '',
+      name: company.name || '',
+      phoneNumber: company.phoneNumber || '',
+      email: company.email || '',
+      category: company.category || '',
+      about: company.about || '',
+      address: company.address || '',
+      city: company.city || '',
+      state: company.state || '',
+      zip: company.zip || '',
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!editFormData.name || !editFormData.phoneNumber || !editFormData.city || !editFormData.category) {
+      toast.error('Please fill all required fields (*)');
+      return;
+    }
+    try {
+      const resp = await authFetch(`/api/company/admin/${editingCompany._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData)
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.message || 'Failed to update company');
+      }
+      toast.success('Company updated successfully');
+      setEditDialogOpen(false);
+      setEditingCompany(null);
+      onRefresh();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const openDeleteDialog = (company) => {
+    setDeleteTarget(company);
+    setDeleteOtpCode('');
+    setDeleteResult(null);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteWithOtp = async () => {
+    if (!deleteTarget || !deleteOtpCode.trim()) {
+      toast.error('Please enter the authenticator code');
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      const resp = await authFetch(`/api/company/${deleteTarget._id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode: deleteOtpCode.trim() })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to delete company');
+      }
+      const data = await resp.json();
+      setDeleteResult(data);
+      toast.success(data.message || 'Company deleted and backup created');
+      onRefresh();
+      fetchBackups();
+    } catch (err) {
+      toast.error(err.message || 'Delete failed');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const openBackupActionDialog = (backup, actionType) => {
+    setBackupActionTarget(backup);
+    setBackupActionType(actionType);
+    setBackupActionOtp('');
+    setBackupActionDialogOpen(true);
+  };
+
+  const handleBackupAction = async () => {
+    if (!backupActionTarget || !backupActionOtp.trim()) {
+      toast.error('Please enter the authenticator code');
+      return;
+    }
+    const otp = backupActionOtp.trim();
+    const fname = backupActionTarget.filename;
+    setBackupActionLoading(true);
+    try {
+      if (backupActionType === 'download') {
+        const resp = await authFetch(`/api/company/backups/${encodeURIComponent(fname)}/download?otpCode=${otp}`);
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.message || 'Download failed');
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast.success('Backup downloaded');
+      } else if (backupActionType === 'restore') {
+        const resp = await authFetch('/api/company/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: fname, otpCode: otp })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.message || 'Failed to restore');
+        }
+        const data = await resp.json();
+        toast.success(data.message || 'Company restored successfully');
+        onRefresh();
+      } else if (backupActionType === 'delete-backup') {
+        const resp = await authFetch(`/api/company/backups/${encodeURIComponent(fname)}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otpCode: otp })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.message || 'Failed to delete backup');
+        }
+        const data = await resp.json();
+        toast.success(data.message || 'Backup deleted');
+        fetchBackups();
+      }
+      setBackupActionDialogOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Operation failed');
+    } finally {
+      setBackupActionLoading(false);
+    }
+  };
 
   const handleSubmit = async (e, shouldContinue = false) => {
     if (e) e.preventDefault();
@@ -459,7 +782,7 @@ function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
     }
 
     try {
-      const resp = await fetch('/api/company', {
+      const resp = await authFetch('/api/company/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -470,21 +793,26 @@ function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
         throw new Error(err.message || 'Failed to add company');
       }
 
+      const data = await resp.json();
       toast.success('Company added successfully');
       onRefresh();
+
+      // Show credentials dialog
+      setCredentialResult({
+        companyName: formData.name,
+        username: data.owner?.username || '',
+        password: data.tempPassword || '',
+        emailSent: data.emailSent || false,
+        emailNote: data.emailNote || '',
+        email: formData.email || '',
+      });
+      setCredDialogOpen(true);
       
       if (!shouldContinue) {
         setIsDialogOpen(false);
-        setFormData({
-          gst: '', name: '', phoneNumber: '', email: '', 
-          category: '', about: '', address: '', city: '', state: '', zip: ''
-        });
+        setFormData(emptyForm);
       } else {
-        // Reset form for next company but stay open
-        setFormData({
-          gst: '', name: '', phoneNumber: '', email: '', 
-          category: '', about: '', address: '', city: '', state: '', zip: ''
-        });
+        setFormData(emptyForm);
       }
     } catch (err) {
       toast.error(err.message);
@@ -494,164 +822,137 @@ function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
   const handleValidateGst = () => {
     if (!formData.gst) return;
     setIsValidating(true);
-    // Simulate GST validation
     setTimeout(() => {
       setIsValidating(false);
       toast.success('GST validated successfully');
     }, 1500);
   };
 
+  const CompanyFormFields = ({ data, setData }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+      <div className="relative group">
+        <Input 
+          placeholder="GST No (Optional)" 
+          value={data.gst}
+          onChange={(e) => setData({...data, gst: e.target.value})}
+          className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl pr-20 focus:border-primary/50 transition-all placeholder:text-zinc-600"
+        />
+        <button 
+          type="button"
+          onClick={() => {
+            if (!data.gst) return;
+            toast.success('GST validated successfully');
+          }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-semibold text-sm hover:text-primary/80 transition-colors"
+        >
+          Validate
+        </button>
+      </div>
+      <Input 
+        placeholder="Company Name *" 
+        value={data.name}
+        onChange={(e) => setData({...data, name: e.target.value})}
+        className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+      />
+      <Input 
+        placeholder="Phone Number *" 
+        value={data.phoneNumber}
+        onChange={(e) => setData({...data, phoneNumber: e.target.value})}
+        className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+      />
+      <Input 
+        placeholder="Email (Optional)" 
+        value={data.email}
+        onChange={(e) => setData({...data, email: e.target.value})}
+        className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+      />
+      <Select 
+        onValueChange={(val) => setData({...data, category: val})}
+        value={data.category}
+      >
+        <SelectTrigger className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all text-zinc-300">
+          <SelectValue placeholder="Select Category *" />
+        </SelectTrigger>
+        <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+          <SelectItem value="it">IT Solutions</SelectItem>
+          <SelectItem value="logistics">Logistics</SelectItem>
+          <SelectItem value="manufacturing">Manufacturing</SelectItem>
+          <SelectItem value="retail">Retail</SelectItem>
+          <SelectItem value="healthcare">Healthcare</SelectItem>
+        </SelectContent>
+      </Select>
+      <Input 
+        placeholder="Brief Description (Optional)" 
+        value={data.about}
+        onChange={(e) => setData({...data, about: e.target.value})}
+        className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+      />
+      <div className="md:col-span-2">
+        <Textarea 
+          placeholder="Full Street Address (Optional)" 
+          value={data.address}
+          onChange={(e) => setData({...data, address: e.target.value})}
+          className="min-h-[120px] bg-zinc-900/40 border-zinc-800/50 rounded-2xl resize-none p-4 focus:border-primary/40 focus:bg-zinc-900/60 transition-all placeholder:text-zinc-600 outline-none ring-0"
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 md:col-span-2 gap-4">
+        <Input 
+          placeholder="City *" 
+          value={data.city}
+          onChange={(e) => setData({...data, city: e.target.value})}
+          className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+        />
+        <Input 
+          placeholder="State" 
+          value={data.state}
+          onChange={(e) => setData({...data, state: e.target.value})}
+          className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+        />
+        <Input 
+          placeholder="Zip Code" 
+          value={data.zip}
+          onChange={(e) => setData({...data, zip: e.target.value})}
+          className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800">
-        <div className="relative w-96">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800">
+        <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <Input 
-            placeholder="Search companies by name or ID..." 
+            placeholder="Search companies by name, ID, category..." 
             className="pl-10 bg-zinc-950 border-zinc-800"
-            value={searchTerm}
-            onChange={(e) => {}} // Note: Search usually handled by parent. Re-refining filter.
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
           />
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="border-zinc-800 flex gap-2">
-            <Filter className="w-4 h-4" /> Filter
-          </Button>
-          
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary text-black hover:bg-primary/90 font-bold shadow-lg shadow-primary/20">
                 <Plus className="w-4 h-4 mr-2" /> Add Company
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl border-zinc-800/50 bg-zinc-950/80 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border-zinc-800/50 bg-zinc-950/80 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
               <div className="bg-gradient-to-b from-primary/5 to-transparent px-8 py-10">
                 <DialogHeader>
                   <DialogTitle className="text-4xl font-extrabold text-center mb-12 tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
                     Company Registration
                   </DialogTitle>
                 </DialogHeader>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                  {/* GST NO */}
-                  <div className="relative group">
-                    <Input 
-                      placeholder="GST No (Optional)" 
-                      value={formData.gst}
-                      onChange={(e) => setFormData({...formData, gst: e.target.value})}
-                      className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl pr-20 focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                    />
-                    <button 
-                      type="button"
-                      onClick={handleValidateGst}
-                      disabled={isValidating}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-semibold text-sm hover:text-primary/80 disabled:opacity-50 transition-colors"
-                    >
-                      {isValidating ? '...' : 'Validate'}
-                    </button>
-                  </div>
-
-                  {/* Company Name */}
-                  <Input 
-                    placeholder="Company Name *" 
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                  />
-
-                  {/* Phone Number */}
-                  <Input 
-                    placeholder="PhoneNumber *" 
-                    value={formData.phoneNumber}
-                    onChange={(e) => setFormData({...formData, phoneNumber: e.target.value})}
-                    className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                  />
-
-                  {/* Email */}
-                  <Input 
-                    placeholder="email(Optional)" 
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                  />
-
-                  {/* Select Categories */}
-                  <Select 
-                    onValueChange={(val) => setFormData({...formData, category: val})}
-                    value={formData.category}
-                  >
-                    <SelectTrigger className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all text-zinc-300">
-                      <SelectValue placeholder="Select Categories *" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                      <SelectItem value="it">IT Solutions</SelectItem>
-                      <SelectItem value="logistics">Logistics</SelectItem>
-                      <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                      <SelectItem value="retail">Retail</SelectItem>
-                      <SelectItem value="healthcare">Healthcare</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {/* About */}
-                  <Input 
-                    placeholder="Brief Description (Optional)" 
-                    value={formData.about}
-                    onChange={(e) => setFormData({...formData, about: e.target.value})}
-                    className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                  />
-
-                  {/* Street Address */}
-                  <div className="md:col-span-2">
-                    <Textarea 
-                      placeholder="Full Street Address (Optional)" 
-                      value={formData.address}
-                      onChange={(e) => setFormData({...formData, address: e.target.value})}
-                      className="min-h-[120px] bg-zinc-900/40 border-zinc-800/50 rounded-2xl resize-none p-4 focus:border-primary/40 focus:bg-zinc-900/60 transition-all placeholder:text-zinc-600 outline-none ring-0"
-                    />
-                  </div>
-
-                  {/* City, State, Zip */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 md:col-span-2 gap-4">
-                    <Input 
-                      placeholder="City *" 
-                      value={formData.city}
-                      onChange={(e) => setFormData({...formData, city: e.target.value})}
-                      className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                    />
-                    <Input 
-                      placeholder="State" 
-                      value={formData.state}
-                      onChange={(e) => setFormData({...formData, state: e.target.value})}
-                      className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                    />
-                    <Input 
-                      placeholder="Zip Code" 
-                      value={formData.zip}
-                      onChange={(e) => setFormData({...formData, zip: e.target.value})}
-                      className="h-14 bg-zinc-900/50 border-zinc-800 rounded-xl focus:border-primary/50 transition-all placeholder:text-zinc-600"
-                    />
-                  </div>
-                </div>
-
+                <CompanyFormFields data={formData} setData={setFormData} />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => setIsDialogOpen(false)}
-                    className="h-14 rounded-2xl text-zinc-400 hover:bg-white/5 font-semibold"
-                  >
+                  <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="h-14 rounded-2xl text-zinc-400 hover:bg-white/5 font-semibold">
                     Cancel
                   </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={(e) => handleSubmit(e, true)}
-                    className="h-14 border-zinc-800 bg-white/5 text-zinc-300 font-semibold rounded-2xl hover:bg-white/10"
-                  >
+                  <Button variant="outline" onClick={(e) => handleSubmit(e, true)} className="h-14 border-zinc-800 bg-white/5 text-zinc-300 font-semibold rounded-2xl hover:bg-white/10">
                     Add & Continue
                   </Button>
-                  <Button 
-                    onClick={(e) => handleSubmit(e, false)}
-                    className="h-14 bg-primary text-black font-extrabold text-lg rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
+                  <Button onClick={(e) => handleSubmit(e, false)} className="h-14 bg-primary text-black font-extrabold text-lg rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
                     Add Company
                   </Button>
                 </div>
@@ -661,15 +962,38 @@ function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
         </div>
       </div>
 
+      {/* Edit Company Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) setEditingCompany(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border-zinc-800/50 bg-zinc-950/80 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="bg-gradient-to-b from-blue-500/5 to-transparent px-8 py-10">
+            <DialogHeader>
+              <DialogTitle className="text-4xl font-extrabold text-center mb-12 tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
+                Edit Company
+              </DialogTitle>
+            </DialogHeader>
+            <CompanyFormFields data={editFormData} setData={setEditFormData} />
+            <div className="grid grid-cols-2 gap-6 mt-12">
+              <Button variant="ghost" onClick={() => setEditDialogOpen(false)} className="h-14 rounded-2xl text-zinc-400 hover:bg-white/5 font-semibold">
+                Cancel
+              </Button>
+              <Button onClick={handleEditSubmit} className="h-14 bg-primary text-black font-extrabold text-lg rounded-2xl shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="border-zinc-800 bg-zinc-900/30">
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-zinc-900/50">
               <TableRow className="hover:bg-transparent border-zinc-800">
                 <TableHead className="text-zinc-400 h-14">Company Name</TableHead>
-                <TableHead className="text-zinc-400 h-14">Address / Info</TableHead>
-                <TableHead className="text-zinc-400 h-14">Status</TableHead>
-                <TableHead className="text-zinc-100 h-14 text-right pr-6">Management</TableHead>
+                <TableHead className="text-zinc-400 h-14">Category</TableHead>
+                <TableHead className="text-zinc-400 h-14">Contact</TableHead>
+                <TableHead className="text-zinc-400 h-14">Location</TableHead>
+                <TableHead className="text-zinc-100 h-14 text-right pr-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -678,30 +1002,331 @@ function TabCompanies({ dbCompanies, searchTerm, onRefresh }) {
                   <TableCell className="font-semibold py-4">
                     <div>{co.name || 'Unnamed Company'}</div>
                     <div className="text-[10px] text-zinc-500 font-normal">ID: {co._id}</div>
+                    {co.gst && <div className="text-[10px] text-zinc-500 font-normal">GST: {co.gst}</div>}
                   </TableCell>
-                  <TableCell className="text-zinc-400 max-w-xs truncate">
-                    {co.address || 'No address provided'}
+                  <TableCell className="text-zinc-400 text-sm">
+                    <span className="px-2.5 py-1 rounded-lg bg-zinc-800/60 border border-zinc-700/50 text-xs font-medium">
+                      {getCategoryLabel(co.category)}
+                    </span>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]`} />
-                      <span className="capitalize text-sm text-zinc-300">Active</span>
-                    </div>
+                  <TableCell className="text-zinc-400 text-sm">
+                    <div>{co.phoneNumber || '—'}</div>
+                    {co.email && <div className="text-[11px] text-zinc-500">{co.email}</div>}
+                  </TableCell>
+                  <TableCell className="text-zinc-400 text-sm">
+                    {[co.city, co.state].filter(Boolean).join(', ') || '—'}
                   </TableCell>
                   <TableCell className="text-right pr-6">
-                    <Button variant="ghost" size="sm">Stats</Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {co.status === 'blocked' ? (
+                        <span className="mr-2 px-2 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold uppercase">Blocked</span>
+                      ) : (
+                        <span className="mr-2 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">Active</span>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10" onClick={() => handleResetOwnerPassword(co)} title="Reset Owner Password">
+                        <Lock className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-blue-400 hover:bg-blue-400/10" onClick={() => openEdit(co)} title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="sm"
+                        className={`h-8 w-8 p-0 ${co.status === 'blocked' ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10' : 'text-amber-400 hover:text-amber-300 hover:bg-amber-400/10'}`}
+                        onClick={() => openOtpDialog(co)}
+                        title={co.status === 'blocked' ? 'Unblock' : 'Block'}
+                      >
+                        {co.status === 'blocked' ? <Unlock className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => openDeleteDialog(co)} title="Delete">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10 text-zinc-500">No companies found</TableCell>
+                  <TableCell colSpan={5} className="text-center py-10 text-zinc-500">No companies found</TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Credentials Result Dialog */}
+      <Dialog open={credDialogOpen} onOpenChange={setCredDialogOpen}>
+        <DialogContent className="max-w-md border-zinc-800/50 bg-zinc-950/90 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="px-8 py-10">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-extrabold text-center mb-2 tracking-tight">
+                <span className="flex items-center justify-center gap-2 text-emerald-400"><CheckCircle className="w-6 h-6" /> Company Created</span>
+              </DialogTitle>
+            </DialogHeader>
+            {credentialResult && (
+              <div className="mt-4 space-y-5">
+                <p className="text-center text-zinc-400 text-sm">
+                  <span className="text-white font-semibold">{credentialResult.companyName}</span> has been registered.
+                  {credentialResult.email ? ' Owner credentials:' : ''}
+                </p>
+                <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Username</p>
+                      <p className="text-white font-mono font-bold text-lg mt-0.5">{credentialResult.username}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-white" onClick={() => { navigator.clipboard.writeText(credentialResult.username); toast.success('Username copied'); }}>
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="border-t border-zinc-800" />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold">Temporary Password</p>
+                      <p className="text-white font-mono font-bold text-lg mt-0.5">{credentialResult.password}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-white" onClick={() => { navigator.clipboard.writeText(credentialResult.password); toast.success('Password copied'); }}>
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-xl border ${credentialResult.emailSent ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                  <Mail className="w-4 h-4 flex-shrink-0" />
+                  <span>{credentialResult.emailSent ? `Credentials sent to ${credentialResult.email}` : (credentialResult.emailNote || 'Email not sent')}</span>
+                </div>
+                <p className="text-[11px] text-zinc-600 text-center">The owner must change this password on first login.</p>
+                <Button onClick={() => setCredDialogOpen(false)} className="w-full h-12 bg-primary text-black font-bold rounded-xl mt-2">
+                  Done
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* OTP Verification Dialog for Block/Unblock */}
+      <Dialog open={otpDialogOpen} onOpenChange={(open) => { setOtpDialogOpen(open); if (!open) { setOtpTarget(null); setOtpCode(''); } }}>
+        <DialogContent className="max-w-md border-zinc-800/50 bg-zinc-950/90 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="px-8 py-10">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-extrabold text-center mb-2 tracking-tight">
+                {otpTarget?.status === 'blocked' ? (
+                  <span className="flex items-center justify-center gap-2 text-emerald-400"><Unlock className="w-6 h-6" /> Unblock Company</span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2 text-red-400"><Ban className="w-6 h-6" /> Block Company</span>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="text-center text-zinc-400 text-sm mt-2 mb-6">
+              <span className="text-white font-semibold">{otpTarget?.name}</span>
+              <p className="mt-2 text-xs text-zinc-500">Enter the 6-digit code from your Google Authenticator app to confirm this action.</p>
+            </div>
+            <div className="flex justify-center mb-6">
+              <Input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-48 h-16 text-center text-3xl font-mono tracking-[0.5em] bg-zinc-900/50 border-zinc-700 rounded-2xl focus:border-primary/50"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Button variant="ghost" onClick={() => setOtpDialogOpen(false)} className="h-12 rounded-xl text-zinc-400 hover:bg-white/5 font-semibold">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleToggleStatus}
+                disabled={otpLoading || otpCode.length !== 6}
+                className={`h-12 font-bold rounded-xl ${otpTarget?.status === 'blocked' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}
+              >
+                {otpLoading ? 'Verifying\u2026' : otpTarget?.status === 'blocked' ? 'Unblock' : 'Block'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Company OTP Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) { setDeleteTarget(null); setDeleteOtpCode(''); setDeleteResult(null); } }}>
+        <DialogContent className="max-w-md border-zinc-800/50 bg-zinc-950/90 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="px-8 py-10">
+            {!deleteResult ? (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-extrabold text-center mb-2 tracking-tight">
+                    <span className="flex items-center justify-center gap-2 text-red-400"><Trash2 className="w-6 h-6" /> Delete Company</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="text-center text-zinc-400 text-sm mt-2 mb-4">
+                  <span className="text-white font-semibold">{deleteTarget?.name}</span>
+                  <p className="mt-2 text-xs text-zinc-500">This will create a backup ZIP and then <span className="text-red-400 font-bold">permanently delete</span> all company data including users, tasks, attendance, messages, and more.</p>
+                  <p className="mt-2 text-xs text-zinc-500">Enter the 6-digit code from your Authenticator app to confirm.</p>
+                </div>
+                <div className="flex justify-center mb-6">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={deleteOtpCode}
+                    onChange={(e) => setDeleteOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="w-48 h-16 text-center text-3xl font-mono tracking-[0.5em] bg-zinc-900/50 border-zinc-700 rounded-2xl focus:border-primary/50"
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button variant="ghost" onClick={() => setDeleteDialogOpen(false)} className="h-12 rounded-xl text-zinc-400 hover:bg-white/5 font-semibold">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleDeleteWithOtp}
+                    disabled={deleteLoading || deleteOtpCode.length !== 6}
+                    className="h-12 font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {deleteLoading ? 'Deleting…' : 'Delete Company'}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-extrabold text-center mb-2 tracking-tight">
+                    <span className="flex items-center justify-center gap-2 text-emerald-400"><CheckCircle className="w-6 h-6" /> Deleted & Backed Up</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="mt-4 space-y-4">
+                  <p className="text-center text-zinc-400 text-sm">{deleteResult.message}</p>
+                  <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Backup File</p>
+                    <p className="text-white font-mono text-sm break-all">{deleteResult.backup}</p>
+                  </div>
+                  {deleteResult.deletedCounts && (
+                    <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-1">
+                      <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-2">Deleted Records</p>
+                      {Object.entries(deleteResult.deletedCounts).map(([key, count]) => (
+                        <div key={key} className="flex justify-between text-sm">
+                          <span className="text-zinc-400 capitalize">{key}</span>
+                          <span className="text-white font-mono">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Button onClick={() => { setDeleteDialogOpen(false); setDeleteResult(null); }} className="w-full h-12 bg-primary text-black font-bold rounded-xl mt-2">
+                    Done
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Backups Section */}
+      <Card className="border-zinc-800/50 bg-zinc-950/50 backdrop-blur-2xl mt-6">
+        <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Database className="w-5 h-5 text-primary" />
+            Company Backups
+          </CardTitle>
+          <Button variant="outline" size="sm" onClick={fetchBackups} className="border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+            <RefreshCw className={`w-4 h-4 mr-2 ${backupsLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {backups.length === 0 ? (
+            <p className="text-center py-6 text-zinc-500 text-sm">
+              {backupsLoading ? 'Loading backups…' : 'No backups found. Backups are created automatically when a company is deleted.'}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-zinc-800/50">
+                  <TableHead className="text-zinc-400">Backup File</TableHead>
+                  <TableHead className="text-zinc-400">Size</TableHead>
+                  <TableHead className="text-zinc-400">Created</TableHead>
+                  <TableHead className="text-zinc-400 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {backups.map((b) => (
+                  <TableRow key={b.filename} className="border-zinc-800/30 hover:bg-zinc-900/30">
+                    <TableCell className="font-mono text-sm text-zinc-300 break-all">{b.filename}</TableCell>
+                    <TableCell className="text-zinc-400 text-sm">{(b.size / 1024).toFixed(1)} KB</TableCell>
+                    <TableCell className="text-zinc-400 text-sm">{new Date(b.createdAt).toLocaleString()}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300 hover:bg-blue-400/10" onClick={() => openBackupActionDialog(b, 'download')}>
+                        <Download className="w-4 h-4 mr-1" /> Download
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10" onClick={() => openBackupActionDialog(b, 'restore')}>
+                        <RefreshCw className="w-4 h-4 mr-1" /> Restore
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-400/10" onClick={() => openBackupActionDialog(b, 'delete-backup')}>
+                        <Trash2 className="w-4 h-4 mr-1" /> Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Backup Action OTP Dialog (Download / Restore / Delete) */}
+      <Dialog open={backupActionDialogOpen} onOpenChange={(open) => { setBackupActionDialogOpen(open); if (!open) { setBackupActionTarget(null); setBackupActionOtp(''); setBackupActionType(null); } }}>
+        <DialogContent className="max-w-md border-zinc-800/50 bg-zinc-950/90 backdrop-blur-2xl text-white p-0 overflow-hidden rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="px-8 py-10">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-extrabold text-center mb-2 tracking-tight">
+                {backupActionType === 'download' && <span className="flex items-center justify-center gap-2 text-blue-400"><Download className="w-6 h-6" /> Download Backup</span>}
+                {backupActionType === 'restore' && <span className="flex items-center justify-center gap-2 text-emerald-400"><Database className="w-6 h-6" /> Restore Company</span>}
+                {backupActionType === 'delete-backup' && <span className="flex items-center justify-center gap-2 text-red-400"><Trash2 className="w-6 h-6" /> Delete Backup</span>}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="text-center text-zinc-400 text-sm mt-2 mb-4">
+              <p className="text-white font-mono text-xs break-all">{backupActionTarget?.filename}</p>
+              {backupActionType === 'download' && <p className="mt-2 text-xs text-zinc-500">Enter the 6-digit Authenticator code to download this backup.</p>}
+              {backupActionType === 'restore' && <p className="mt-2 text-xs text-zinc-500">This will restore all company data (users, tasks, attendance, messages, etc.) from this backup.</p>}
+              {backupActionType === 'delete-backup' && <p className="mt-2 text-xs text-zinc-500">This will permanently delete this backup file. This action cannot be undone.</p>}
+              <p className="mt-2 text-xs text-zinc-500">Enter the 6-digit Authenticator code to confirm.</p>
+            </div>
+            <div className="flex justify-center mb-6">
+              <Input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={backupActionOtp}
+                onChange={(e) => setBackupActionOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-48 h-16 text-center text-3xl font-mono tracking-[0.5em] bg-zinc-900/50 border-zinc-700 rounded-2xl focus:border-primary/50"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Button variant="ghost" onClick={() => setBackupActionDialogOpen(false)} className="h-12 rounded-xl text-zinc-400 hover:bg-white/5 font-semibold">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBackupAction}
+                disabled={backupActionLoading || backupActionOtp.length !== 6}
+                className={`h-12 font-bold rounded-xl text-white ${
+                  backupActionType === 'download' ? 'bg-blue-600 hover:bg-blue-700' :
+                  backupActionType === 'restore' ? 'bg-emerald-600 hover:bg-emerald-700' :
+                  'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {backupActionLoading
+                  ? (backupActionType === 'download' ? 'Downloading…' : backupActionType === 'restore' ? 'Restoring…' : 'Deleting…')
+                  : (backupActionType === 'download' ? 'Download' : backupActionType === 'restore' ? 'Restore' : 'Delete')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -990,7 +1615,7 @@ function TabSystem() {
   const adminId = localStorage.getItem('active_sa_id');
 
   const fetchMaintenance = () => {
-    fetch('/api/system/maintenance')
+    authFetch('/api/system/maintenance')
       .then(res => res.json())
       .then(data => setMaintenance(data.maintenance))
       .catch(e => console.error('System fetch failed', e));
@@ -998,7 +1623,7 @@ function TabSystem() {
 
   const fetchLogs = () => {
     setLogsLoading(true);
-    fetch('/api/system/logs?limit=20', { headers: { 'x-user-id': adminId } })
+    authFetch('/api/system/logs?limit=20')
       .then(res => res.json())
       .then(data => {
         setLogs(data.logs || []);
@@ -1019,9 +1644,8 @@ function TabSystem() {
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
-      const resp = await fetch('/api/system/maintenance/toggle', {
-        method: 'POST',
-        headers: { 'x-user-id': adminId }
+      const resp = await authFetch('/api/system/maintenance/toggle', {
+        method: 'POST'
       });
       const data = await resp.json();
       if (data.success) {
@@ -1041,9 +1665,8 @@ function TabSystem() {
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
-      const resp = await fetch('/api/system/flush-cache', {
-        method: 'POST',
-        headers: { 'x-user-id': adminId }
+      const resp = await authFetch('/api/system/flush-cache', {
+        method: 'POST'
       });
       const data = await resp.json();
       if (data.success) {
@@ -1062,9 +1685,8 @@ function TabSystem() {
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
-      const resp = await fetch('/api/system/restart', {
-        method: 'POST',
-        headers: { 'x-user-id': adminId }
+      const resp = await authFetch('/api/system/restart', {
+        method: 'POST'
       });
       const data = await resp.json();
       if (data.success) {
@@ -1095,9 +1717,8 @@ function TabSystem() {
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
-      const resp = await fetch('/api/system/factory-reset', {
-        method: 'POST',
-        headers: { 'x-user-id': adminId }
+      const resp = await authFetch('/api/system/factory-reset', {
+        method: 'POST'
       });
       const data = await resp.json();
       if (data.success) {
@@ -1198,9 +1819,7 @@ function TabSystem() {
                   className="text-xs text-primary p-0 h-auto"
                   onClick={async () => {
                     try {
-                      const resp = await fetch('/api/system/logs/download', {
-                        headers: { 'x-user-id': adminId }
-                      });
+                      const resp = await authFetch('/api/system/logs/download');
                       if (!resp.ok) throw new Error('Failed to fetch logs');
                       const blob = await resp.blob();
                       const url = URL.createObjectURL(blob);
@@ -1220,6 +1839,8 @@ function TabSystem() {
              </CardContent>
           </Card>
        </div>
+
+       <DeploymentControls adminId={adminId} />
 
        <Card className="border-red-900/50 bg-red-950/10">
           <CardHeader>
@@ -1245,39 +1866,215 @@ function TabSystem() {
   );
 }
 
-function TabProfile({ data, setData }) {
-  const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
+function DeploymentControls({ adminId }) {
+  const [isPulling, setIsPulling] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployLog, setDeployLog] = useState('');
 
-  const handleUpdateProfile = (e) => {
-    e.preventDefault();
-    toast.success('Profile details synchronized successfully');
+  const handleGitPull = async () => {
+    setIsPulling(true);
+    setDeployLog('');
+    try {
+      const res = await authFetch('/api/deploy/git-pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      setDeployLog(data.output || data.message || 'Done');
+      if (data.success) toast.success('Git pull successful');
+      else toast.error(data.message || 'Git pull failed');
+    } catch (e) {
+      toast.error('Git pull failed: ' + e.message);
+      setDeployLog('Error: ' + e.message);
+    } finally {
+      setIsPulling(false);
+    }
   };
 
-  const handleUpdatePassword = (e) => {
+  const handleRebuildDeploy = async () => {
+    setIsDeploying(true);
+    setDeployLog('');
+    try {
+      const res = await authFetch('/api/deploy/rebuild', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      setDeployLog(data.output || data.message || 'Done');
+      if (data.success) toast.success('Rebuild & deploy successful! Refresh to see changes.');
+      else toast.error(data.message || 'Rebuild failed');
+    } catch (e) {
+      toast.error('Rebuild failed: ' + e.message);
+      setDeployLog('Error: ' + e.message);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
+
+  return (
+    <Card className="border-amber-900/50 bg-amber-950/10">
+      <CardHeader>
+        <CardTitle className="text-amber-400 text-lg flex items-center gap-2">
+          <Settings className="w-5 h-5" />
+          Deployment Controls
+        </CardTitle>
+        <p className="text-xs text-zinc-500">Pull latest code and rebuild the live site.</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            onClick={handleGitPull}
+            disabled={isPulling || isDeploying}
+            variant="outline"
+            className="flex-1 h-12 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+          >
+            {isPulling ? '⟳ Pulling...' : '⇣ Git Code Pull'}
+          </Button>
+          <Button
+            onClick={handleRebuildDeploy}
+            disabled={isPulling || isDeploying}
+            className="flex-1 h-12 bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            {isDeploying ? '⟳ Building & Deploying...' : '🚀 Rebuild & Deploy'}
+          </Button>
+        </div>
+        {deployLog && (
+          <pre className="mt-3 p-3 rounded-lg bg-zinc-950 text-green-400 text-xs font-mono overflow-x-auto max-h-48 whitespace-pre-wrap border border-zinc-800">
+            {deployLog}
+          </pre>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TabProfile({ data, setData }) {
+  const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
+  const [saving, setSaving] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Reload profile from DB
+  const reloadProfile = async () => {
+    if (!data.userId) return;
+    try {
+      const resp = await authFetch(`/api/users/${data.userId}`);
+      if (resp.ok) {
+        const u = await resp.json();
+        if (u.role === 'param') {
+          setData({
+            userId: u.userId,
+            name: u.name || u.username || '',
+            username: u.username || '',
+            email: u.email || '',
+            phone: u.phone || '',
+            designation: u.designation || '',
+            department: u.department || '',
+            avatar: u.avatar || '',
+            role: u.role,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to reload profile', e);
+    }
+  };
+
+  // Save profile to DB
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (!data.userId) return;
+    setSaving(true);
+    try {
+      const resp = await authFetch(`/api/users/${data.userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: data.userId,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          designation: data.designation,
+          department: data.department,
+        })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to update profile');
+      }
+      const updated = await resp.json();
+      setData(prev => ({ ...prev, name: updated.name, email: updated.email, phone: updated.phone, designation: updated.designation, department: updated.department }));
+      toast.success('Profile updated in database');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Change password via API
+  const handleUpdatePassword = async (e) => {
     e.preventDefault();
     if (passwords.next !== passwords.confirm) {
       toast.error('New passwords do not match');
       return;
     }
-    toast.success('Security credentials updated');
-    setPasswords({ current: '', next: '', confirm: '' });
+    if (!passwords.current || !passwords.next) {
+      toast.error('Please fill all password fields');
+      return;
+    }
+    setChangingPw(true);
+    try {
+      const identifier = data.username || data.userId;
+      const resp = await authFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, currentPassword: passwords.current, newPassword: passwords.next })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to change password');
+      }
+      toast.success('Password updated successfully');
+      setPasswords({ current: '', next: '', confirm: '' });
+    } catch (err) {
+      toast.error(err.message || 'Failed to change password');
+    } finally {
+      setChangingPw(false);
+    }
   };
 
-  const handleAvatarUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Image size must be less than 2MB');
-        return;
+  // Avatar upload via API
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be less than 2MB');
+      e.target.value = '';
+      return;
+    }
+    if (!data.userId) return;
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const resp = await authFetch(`/api/users/${data.userId}/avatar`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.message || 'Upload failed');
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
-        localStorage.setItem('sa_avatar', base64String);
-        setData(prev => ({ ...prev, avatar: base64String }));
-        toast.success('Avatar updated instantly');
-      };
-      reader.readAsDataURL(file);
+      const result = await resp.json();
+      setData(prev => ({ ...prev, avatar: result.avatar || '' }));
+      toast.success('Profile picture updated');
+    } catch (err) {
+      toast.error(err.message || 'Failed to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
     }
   };
 
@@ -1289,33 +2086,55 @@ function TabProfile({ data, setData }) {
             <div className="absolute inset-0 bg-black/20" />
           </div>
           <div className="px-6 w-full flex flex-col items-center relative">
-            <div className="relative -mt-12 border-4 border-zinc-950 rounded-3xl overflow-hidden bg-zinc-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-               <img src={data.avatar} alt="Profile" className="w-24 h-24 object-cover" />
-               {/* Avatar is permanent brand image — upload disabled */}
-               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-not-allowed">
-                 <span className="text-white text-[9px] font-bold text-center leading-tight px-2">Brand Avatar
-Locked</span>
+            <div
+              className="relative -mt-12 border-4 border-zinc-950 rounded-3xl overflow-hidden bg-zinc-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] cursor-pointer group"
+              onClick={() => fileInputRef.current?.click()}
+            >
+               {data.avatar ? (
+                 <img src={data.avatar} alt="Profile" className="w-24 h-24 object-cover" />
+               ) : (
+                 <div className="w-24 h-24 flex items-center justify-center text-zinc-500">
+                   <User className="w-12 h-12" />
+                 </div>
+               )}
+               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                 {uploadingAvatar ? (
+                   <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                 ) : (
+                   <Camera className="w-5 h-5 text-white" />
+                 )}
                </div>
+               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
             </div>
             
             <div className="mt-6 text-center space-y-1">
-              <h3 className="text-2xl font-bold text-white tracking-tight">{data.name}</h3>
-              <p className="text-zinc-400 text-sm font-medium tracking-wide opacity-80">{data.role}</p>
+              <h3 className="text-2xl font-bold text-white tracking-tight">{data.name || data.username}</h3>
+              <p className="text-zinc-400 text-sm font-medium tracking-wide opacity-80">{data.designation || 'Super Admin'}</p>
               <div className="flex gap-2 justify-center pt-3">
                 <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase rounded-lg border border-primary/20">Super Admin</span>
-                <span className="px-3 py-1 bg-zinc-800/80 text-zinc-400 text-[10px] font-bold uppercase rounded-lg border border-zinc-700 font-mono">ID: {data.id}</span>
+                <span className="px-3 py-1 bg-zinc-800/80 text-zinc-400 text-[10px] font-bold uppercase rounded-lg border border-zinc-700 font-mono">ID: {data.userId}</span>
               </div>
             </div>
 
             <div className="w-full mt-8 pt-6 border-t border-zinc-800/50 space-y-4 pb-8">
-               <div className="flex items-center gap-4 text-sm text-zinc-300 bg-white/5 p-3 rounded-xl border border-white/5">
-                 <div className="p-2 rounded-lg bg-primary/10 shadow-inner"><Mail className="w-4 h-4 text-primary" /></div>
-                 <span className="font-medium truncate">{data.email}</span>
-               </div>
-               <div className="flex items-center gap-4 text-sm text-zinc-300 bg-white/5 p-3 rounded-xl border border-white/5">
-                 <div className="p-2 rounded-lg bg-emerald-500/10 shadow-inner"><Shield className="w-4 h-4 text-emerald-400" /></div>
-                 <span className="font-medium">Multi-Factor Auth Enabled</span>
-               </div>
+               {data.email && (
+                 <div className="flex items-center gap-4 text-sm text-zinc-300 bg-white/5 p-3 rounded-xl border border-white/5">
+                   <div className="p-2 rounded-lg bg-primary/10 shadow-inner"><Mail className="w-4 h-4 text-primary" /></div>
+                   <span className="font-medium truncate">{data.email}</span>
+                 </div>
+               )}
+               {data.phone && (
+                 <div className="flex items-center gap-4 text-sm text-zinc-300 bg-white/5 p-3 rounded-xl border border-white/5">
+                   <div className="p-2 rounded-lg bg-emerald-500/10 shadow-inner"><Phone className="w-4 h-4 text-emerald-400" /></div>
+                   <span className="font-medium">{data.phone}</span>
+                 </div>
+               )}
+               {data.department && (
+                 <div className="flex items-center gap-4 text-sm text-zinc-300 bg-white/5 p-3 rounded-xl border border-white/5">
+                   <div className="p-2 rounded-lg bg-amber-500/10 shadow-inner"><Shield className="w-4 h-4 text-amber-400" /></div>
+                   <span className="font-medium">{data.department}</span>
+                 </div>
+               )}
             </div>
           </div>
         </Card>
@@ -1353,24 +2172,48 @@ Locked</span>
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-zinc-400 font-medium">Primary Email Address</Label>
+                  <Label className="text-zinc-400 font-medium">Email Address</Label>
                   <Input 
                     value={data.email} 
                     onChange={(e) => setData({...data, email: e.target.value})}
                     className="bg-zinc-950 border-zinc-800 focus:border-primary text-white" 
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label className="text-zinc-400 font-medium">Admin Identifier (Non-editable)</Label>
+                <div className="space-y-2">
+                  <Label className="text-zinc-400 font-medium">Phone</Label>
                   <Input 
-                    value={data.id} 
+                    value={data.phone} 
+                    onChange={(e) => setData({...data, phone: e.target.value})}
+                    className="bg-zinc-950 border-zinc-800 focus:border-primary text-white" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-400 font-medium">Designation</Label>
+                  <Input 
+                    value={data.designation} 
+                    onChange={(e) => setData({...data, designation: e.target.value})}
+                    className="bg-zinc-950 border-zinc-800 focus:border-primary text-white" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-400 font-medium">Department</Label>
+                  <Input 
+                    value={data.department} 
+                    onChange={(e) => setData({...data, department: e.target.value})}
+                    className="bg-zinc-950 border-zinc-800 focus:border-primary text-white" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-400 font-medium">User ID (Non-editable)</Label>
+                  <Input 
+                    value={data.userId} 
                     disabled
                     className="bg-zinc-900/50 border-zinc-800 italic text-zinc-500 cursor-not-allowed" 
                   />
                 </div>
               </div>
-              <Button type="submit" className="bg-primary hover:bg-primary/90 text-black font-bold h-12 px-6">
-                Update Profile Details
+              <Button type="submit" disabled={saving} className="bg-primary hover:bg-primary/90 text-black font-bold h-12 px-6">
+                {saving ? 'Saving…' : 'Update Profile'}
               </Button>
             </form>
           </CardContent>
@@ -1380,19 +2223,19 @@ Locked</span>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2 text-amber-400">
               <Lock className="w-5 h-5" />
-              Authentication Security
+              Change Password
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleUpdatePassword} className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-zinc-400 font-medium">Current Security Password</Label>
+                  <Label className="text-zinc-400 font-medium">Current Password</Label>
                   <Input 
                     type="password" 
                     value={passwords.current}
                     onChange={(e) => setPasswords({...passwords, current: e.target.value})}
-                    placeholder="Verify old password"
+                    placeholder="Enter current password"
                     className="bg-zinc-950 border-zinc-800 text-white" 
                   />
                 </div>
@@ -1403,7 +2246,7 @@ Locked</span>
                       type="password" 
                       value={passwords.next}
                       onChange={(e) => setPasswords({...passwords, next: e.target.value})}
-                      placeholder="Minimum 8 characters"
+                      placeholder="Minimum 4 characters"
                       className="bg-zinc-950 border-zinc-800 text-white" 
                     />
                   </div>
@@ -1418,8 +2261,8 @@ Locked</span>
                   </div>
                 </div>
               </div>
-              <Button type="submit" variant="secondary" className="font-bold h-12 px-8 border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white">
-                Revolutionize Access Key
+              <Button type="submit" disabled={changingPw} variant="secondary" className="font-bold h-12 px-8 border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white">
+                {changingPw ? 'Changing…' : 'Change Password'}
               </Button>
             </form>
           </CardContent>

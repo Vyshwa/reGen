@@ -1,5 +1,6 @@
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import { resolveCompanyId } from '../utils/resolveCompanyId.js';
 
 const parseMonthDay = (dob) => {
   if (!dob) return null;
@@ -77,17 +78,34 @@ const buildReminderNotifications = (staffUser, birthdayDate, daysBefore, recipie
 export const runBirthdayReminderJob = async () => {
   const today = startOfTodayLocal();
   const allUsers = await User.find();
-  const recipients = allUsers.filter((u) => String(u.status || 'active') !== 'inactive');
-  const staff = recipients.filter((u) => isStaffUser(u) && u.dateOfBirth);
+
+  // Group users by companyId for isolation
+  const companyMap = new Map(); // companyId -> [users]
+  for (const u of allUsers) {
+    const cid = u.companyId ? u.companyId.toString() : '__global__';
+    if (!companyMap.has(cid)) companyMap.set(cid, []);
+    companyMap.get(cid).push(u);
+  }
 
   const targetDays = new Set([7, 1]);
   const toInsert = [];
-  for (const s of staff) {
-    const nextBday = computeNextBirthday(s.dateOfBirth, today);
-    if (!nextBday) continue;
-    const daysUntil = diffDays(today, nextBday);
-    if (!targetDays.has(daysUntil)) continue;
-    toInsert.push(...buildReminderNotifications(s, nextBday, daysUntil, recipients));
+
+  for (const [companyIdStr, users] of companyMap) {
+    const recipients = users.filter((u) => String(u.status || 'active') !== 'inactive');
+    const staff = recipients.filter((u) => isStaffUser(u) && u.dateOfBirth);
+
+    for (const s of staff) {
+      const nextBday = computeNextBirthday(s.dateOfBirth, today);
+      if (!nextBday) continue;
+      const daysUntil = diffDays(today, nextBday);
+      if (!targetDays.has(daysUntil)) continue;
+      // Skip users without companyId — they can't receive scoped notifications
+      if (!s.companyId) continue;
+      const notifications = buildReminderNotifications(s, nextBday, daysUntil, recipients);
+      // Stamp companyId on each notification
+      for (const n of notifications) n.companyId = s.companyId;
+      toInsert.push(...notifications);
+    }
   }
 
   if (toInsert.length === 0) {
@@ -108,7 +126,9 @@ export const runBirthdayReminderJob = async () => {
 
 export const createNotification = async (req, res) => {
   try {
-    const notification = new Notification(req.body);
+    const body = { ...req.body };
+    body.companyId = await resolveCompanyId(req, body);
+    const notification = new Notification(body);
     await notification.save();
     res.status(201).json(notification);
   } catch (error) {
@@ -118,7 +138,9 @@ export const createNotification = async (req, res) => {
 
 export const getUserNotifications = async (req, res) => {
   try {
-    const list = await Notification.find({ userId: req.params.userId }).sort({ createdAt: -1 });
+    const filter = { userId: req.params.userId };
+    if (req.companyId) filter.companyId = req.companyId;
+    const list = await Notification.find(filter).sort({ createdAt: -1 });
     res.status(200).json(list);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -127,7 +149,9 @@ export const getUserNotifications = async (req, res) => {
 
 export const deleteNotification = async (req, res) => {
   try {
-    const n = await Notification.findOneAndDelete({ id: req.params.id });
+    const filter = { id: req.params.id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const n = await Notification.findOneAndDelete(filter);
     if (!n) return res.status(404).json({ message: 'Notification not found' });
     res.status(200).json({ message: 'Notification deleted successfully' });
   } catch (error) {

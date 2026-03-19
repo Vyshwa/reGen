@@ -1,15 +1,21 @@
 import Task from '../models/Task.js';
 import User from '../models/User.js';
+import { resolveCompanyId } from '../utils/resolveCompanyId.js';
+import { emitToCompany } from '../socket.js';
 
 export const createTask = async (req, res) => {
   try {
-    const task = new Task(req.body);
+    const body = { ...req.body };
+    body.companyId = await resolveCompanyId(req, body);
+    const task = new Task(body);
     await task.save();
+    emitToCompany('task:change', task.companyId, { action: 'create', id: task.id });
     if (task.assignedTo) {
       try {
         const notificationPayload = {
           id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           userId: task.assignedTo,
+          companyId: task.companyId,
           title: 'New Task Assigned',
           message: `You have been assigned: ${task.title}`,
           createdAt: new Date().toISOString(),
@@ -30,7 +36,8 @@ export const createTask = async (req, res) => {
 
 export const getAllTasks = async (req, res) => {
   try {
-    const tasks = await Task.find();
+    const filter = req.companyId ? { companyId: req.companyId } : {};
+    const tasks = await Task.find(filter);
     res.status(200).json(tasks);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -40,14 +47,17 @@ export const getAllTasks = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const id = req.body.id || req.params.id;
-    const previous = await Task.findOne({ id });
-    const task = await Task.findOneAndUpdate({ id }, req.body, { new: true });
+    const findFilter = { id };
+    if (req.companyId) findFilter.companyId = req.companyId;
+    const previous = await Task.findOne(findFilter);
+    const task = await Task.findOneAndUpdate(findFilter, req.body, { new: true });
     if (!task) return res.status(404).json({ message: 'Task not found' });
     if (task.assignedTo) {
       try {
         const notificationPayload = {
           id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           userId: task.assignedTo,
+          companyId: task.companyId,
           title: 'Task Updated',
           message: `Your task was updated: ${task.title}`,
           createdAt: new Date().toISOString(),
@@ -61,15 +71,18 @@ export const updateTask = async (req, res) => {
     // Notify assignor if we can resolve their userId
     if (task.assignorName) {
       try {
-        const assignor = await User.findOne({
+        const assignorFilter = {
           $or: [{ username: task.assignorName }, { name: task.assignorName }]
-        });
+        };
+        if (task.companyId) assignorFilter.companyId = task.companyId;
+        const assignor = await User.findOne(assignorFilter);
         if (assignor && assignor.userId) {
           const statusLabel = String(task.status || '').replace('_', ' ') || 'updated';
           const { default: Notification } = await import('../models/Notification.js');
           const n2 = new Notification({
             id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             userId: assignor.userId,
+            companyId: task.companyId,
             title: 'Task Status Change',
             message: `Task "${task.title}" status: ${statusLabel}`,
             createdAt: new Date().toISOString(),
@@ -79,6 +92,7 @@ export const updateTask = async (req, res) => {
         }
       } catch (e) {}
     }
+    emitToCompany('task:change', task.companyId, { action: 'update', id: task.id });
     res.status(200).json(task);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -87,8 +101,11 @@ export const updateTask = async (req, res) => {
 
 export const deleteTask = async (req, res) => {
   try {
-    const task = await Task.findOneAndDelete({ id: req.params.id });
+    const filter = { id: req.params.id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const task = await Task.findOneAndDelete(filter);
     if (!task) return res.status(404).json({ message: 'Task not found' });
+    emitToCompany('task:change', task.companyId, { action: 'delete', id: task.id });
     res.status(200).json({ message: 'Task deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });

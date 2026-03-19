@@ -237,11 +237,6 @@ export default function CompanyModule({ userProfile }) {
           {isOwner || isAdmin ? 'Department Overview' : 'Company Details'}
         </h2>
         <div className="flex gap-2">
-           {isOwner && companies.length < 5 && (
-             <Button variant="outline" onClick={handleAddNew} className="border-dashed">
-               <Plus className="w-4 h-4 mr-2" /> Add Company
-             </Button>
-           )}
           {(isAdmin || isOwner) && (
             <Button onClick={handleSubmit} disabled={updateCompany.isPending || createCompany.isPending}>
               {updateCompany.isPending || createCompany.isPending ? 'Saving...' : currentCompany ? 'Update Company' : 'Save Company'}

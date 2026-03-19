@@ -14,6 +14,7 @@ const companySchema = new mongoose.Schema({
   taxDetails: { type: String },
   policies: { type: String },
   ownerId: { type: String, required: true }, // Links to the user who created it (Owner)
+  status: { type: String, enum: ['active', 'blocked'], default: 'active' },
 }, { timestamps: true });
 
 export default mongoose.model('Company', companySchema);

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const scrumNoteSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', index: true },
   userId: { type: String, required: true },
   taskDetails: { type: String, required: true },
   status: { type: String, enum: ['in_progress', 'paused', 'completed', 'blocked'], default: 'in_progress' },

@@ -8,15 +8,9 @@ export const maintenanceCheck = async (req, res, next) => {
     const isMaintenance = setting?.value === true;
 
     if (isMaintenance) {
-      // Allow if the user is a Super Admin
-      // Expecting x-user-id header which the frontend should send
-      const userId = req.headers['x-user-id'];
-      
-      if (userId) {
-        const user = await User.findOne({ $or: [{ userId }, { username: userId }] });
-        if (user && ['param', 'owner', 'admin'].includes(user.role)) {
-          return next();
-        }
+      // Allow if the user is a Super Admin (from JWT)
+      if (req.user && req.user.role === 'param') {
+        return next();
       }
 
       return res.status(503).json({ 

@@ -8,6 +8,8 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import http from 'http';
+import { initSocketIO } from './socket.js';
 
 import userRoutes from './routes/users.js';
 import taskRoutes from './routes/tasks.js';
@@ -23,6 +25,8 @@ import { addHoliday, getAllHolidays } from './controllers/holidayController.js';
 import { runBirthdayReminderJob } from './controllers/notificationController.js';
 import SystemSetting from './models/SystemSetting.js';
 import { maintenanceCheck } from './middleware/maintenanceCheck.js';
+import { signToken, verifyToken } from './middleware/authJwt.js';
+import { companyScope } from './middleware/companyScope.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -206,7 +210,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Maintenance Mode Check
     const maintenance = await isMaintenanceMode();
-    if (maintenance && !['param', 'owner', 'admin'].includes(user.role)) {
+    if (maintenance && user.role !== 'param') {
       return res.status(503).json({ message: 'Maintenance Process Ongoing. Only Super Admin can login currently.' });
     }
 
@@ -228,10 +232,22 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     pushLog('AUTH', `User logged in: ${user.username}`, `role=${user.role}`);
+
+    // Resolve companyId if missing (for owner users)
+    if (!user.companyId && user.role === 'owner') {
+      const Company = (await import('./models/Company.js')).default;
+      const comp = await Company.findOne({ ownerId: user.userId });
+      if (comp) {
+        user.companyId = comp._id;
+        await User.updateOne({ userId: user.userId }, { companyId: comp._id });
+      }
+    }
+
     const payload = user.toObject();
     delete payload.password;
     if (payload.mustChangePassword === undefined) payload.mustChangePassword = false;
-    res.status(200).json(payload);
+    const token = signToken(user);
+    res.status(200).json({ ...payload, token });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
@@ -276,7 +292,7 @@ app.post('/api/auth/change-password', async (req, res) => {
 // Admin resets a user's password directly (no admin password prompt needed)
 app.post('/api/auth/admin-reset-password', async (req, res) => {
   try {
-    const adminId = String(req.headers['x-user-id'] || '').trim();
+    const adminId = String(req.user?.userId || '').trim();
     const targetIdentifier = String(req.body?.targetIdentifier || '').trim();
     const newPassword = String(req.body?.newPassword || '') || DEFAULT_PASSWORD;
 
@@ -291,6 +307,15 @@ app.post('/api/auth/admin-reset-password', async (req, res) => {
 
     const target = await User.findOne({ $or: [{ userId: targetIdentifier }, { username: targetIdentifier }] }).select('+password');
     if (!target) return res.status(404).json({ message: 'Target user not found' });
+
+    // Company isolation: non-param admins can only reset users in their own company
+    if (admin.role !== 'param') {
+      const adminCid = admin.companyId ? admin.companyId.toString() : null;
+      const targetCid = target.companyId ? target.companyId.toString() : null;
+      if (!adminCid || !targetCid || adminCid !== targetCid) {
+        return res.status(403).json({ message: 'Cannot reset password for users in another company' });
+      }
+    }
 
     target.password = await bcrypt.hash(newPassword, 10);
     target.mustChangePassword = newPassword === DEFAULT_PASSWORD;
@@ -327,6 +352,15 @@ app.post('/api/auth/reset-link', async (req, res) => {
 
     const target = await User.findOne({ $or: [{ userId: targetIdentifier }, { username: targetIdentifier }] }).select('+resetTokenHash');
     if (!target) return res.status(404).json({ message: 'Target user not found' });
+
+    // Company isolation: non-param admins can only generate reset links for their own company's users
+    if (admin.role !== 'param') {
+      const adminCid = admin.companyId ? admin.companyId.toString() : null;
+      const targetCid = target.companyId ? target.companyId.toString() : null;
+      if (!adminCid || !targetCid || adminCid !== targetCid) {
+        return res.status(403).json({ message: 'Cannot reset password for users in another company' });
+      }
+    }
 
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -372,11 +406,17 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// Avatar upload endpoint
+// JWT Authentication Middleware — applies to all routes below
+app.use(verifyToken);
+// Company data isolation — resolves companyId for the current user
+app.use(companyScope);
+
 app.post('/api/users/:userId/avatar', upload.single('avatar'), async (req, res) => {
   try {
     const userId = req.params.userId;
-    const existingUser = await User.findOne({ userId });
+    const filter = { userId };
+    if (req.companyId) filter.companyId = req.companyId;
+    const existingUser = await User.findOne(filter);
     if (!existingUser) {
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(404).json({ message: 'User not found' });
@@ -401,8 +441,10 @@ app.post('/api/users/:userId/avatar', upload.single('avatar'), async (req, res) 
     const avatarPath = `/uploads/${req.file.filename}`;
     
     // Update user's avatar field
+    const avatarFilter = { userId };
+    if (req.companyId) avatarFilter.companyId = req.companyId;
     const user = await User.findOneAndUpdate(
-      { userId },
+      avatarFilter,
       { avatar: avatarPath, lastAvatarUpdate: new Date() },
       { new: true }
     );
@@ -480,11 +522,8 @@ const execAsync = promisify(exec);
 const REPO_DIR = '/home/vyshwa/web/reGen';
 const LIVE_DIR = '/web/regen_live';
 
-const isSuperAdmin = async (req) => {
-  const userId = req.headers['x-user-id'];
-  if (!userId) return false;
-  const user = await User.findOne({ $or: [{ userId }, { username: userId }] });
-  return user && ['param', 'owner', 'admin'].includes(user.role);
+const isSuperAdmin = (req) => {
+  return req.user && req.user.role === 'param';
 };
 
 app.post('/api/deploy/git-pull', async (req, res) => {
@@ -611,6 +650,9 @@ app.post('/api/system/factory-reset', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const server = http.createServer(app);
+initSocketIO(server);
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} (with WebSocket)`);
 });

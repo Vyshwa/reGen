@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const leaveSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', index: true },
   userId: { type: String, required: true },
   displayId: { type: String },
   type: { type: String, enum: ['casual', 'sick', 'earned', 'unpaid'], default: 'casual' },

@@ -236,7 +236,7 @@ export function useGetAllAttendance() {
       return actor.getAllAttendance();
     },
     enabled: !!actor && !isFetching,
-    refetchInterval: 30000, // Poll every 30s so active user counts stay live
+    // Real-time updates handled by WebSocket (useSocket hook)
   });
 }
 
@@ -384,6 +384,38 @@ export function useDeleteMessage() {
       return { previous };
     },
     onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['messages'], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+    }
+  });
+}
+
+export function useEditMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, content }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.editMessage(id, content);
+    },
+    onMutate: async ({ id, content }) => {
+      await queryClient.cancelQueries({ queryKey: ['messages'] });
+      const previous = queryClient.getQueryData(['messages']);
+      queryClient.setQueryData(['messages'], (old = []) =>
+        old.map(m => {
+          const mid = m._id ?? m.messageId ?? m.id;
+          if (mid === id) return { ...m, content, editedAt: new Date().toISOString() };
+          return m;
+        })
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['messages'], context.previous);
       }

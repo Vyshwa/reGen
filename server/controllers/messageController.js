@@ -1,4 +1,6 @@
 import Message from '../models/Message.js';
+import { resolveCompanyId } from '../utils/resolveCompanyId.js';
+import { emitToCompany } from '../socket.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -90,6 +92,7 @@ const normalizeAttachment = async (att, seed, index) => {
 export const createMessage = async (req, res) => {
   try {
     const body = { ...req.body };
+    body.companyId = await resolveCompanyId(req, body);
     body.messageId = body.messageId || body.id;
     if (Array.isArray(body.attachments)) {
       const seed = body.messageId || body.id || body.senderId || 'message';
@@ -103,16 +106,65 @@ export const createMessage = async (req, res) => {
     }
     const msg = new Message(body);
     await msg.save();
+    emitToCompany('message:change', msg.companyId, { action: 'create', id: msg.messageId || msg.id });
     res.status(201).json(msg);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
 };
 
-export const getAllMessages = async (_req, res) => {
+export const getAllMessages = async (req, res) => {
   try {
-    const msgs = await Message.find().sort({ createdAt: 1 });
+    const filter = req.companyId ? { companyId: req.companyId } : {};
+    const msgs = await Message.find(filter).sort({ createdAt: 1 });
     res.status(200).json(msgs);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const EDIT_DELETE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const PRIVILEGED_ROLES = ['param', 'owner'];
+
+const canModifyMessage = (user, message) => {
+  const role = (user.role || '').toLowerCase();
+  // param and owner can modify any message anytime
+  if (PRIVILEGED_ROLES.includes(role)) return { allowed: true };
+  // Other users can only modify their own messages
+  const userId = user.userId || '';
+  const senderId = message.senderId || '';
+  if (userId !== senderId) return { allowed: false, reason: 'You can only modify your own messages' };
+  // Check 15-minute window from message creation
+  const createdAt = message.createdAt ? new Date(message.createdAt) : null;
+  if (!createdAt) return { allowed: false, reason: 'Cannot determine message creation time' };
+  const elapsed = Date.now() - createdAt.getTime();
+  if (elapsed > EDIT_DELETE_WINDOW_MS) {
+    return { allowed: false, reason: 'Edit/delete window (15 minutes) has expired' };
+  }
+  return { allowed: true };
+};
+
+export const updateMessage = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const baseQuery = { $or: [{ messageId: id }, { id }, { _id: id }] };
+    const query = req.companyId ? { ...baseQuery, companyId: req.companyId } : baseQuery;
+    const msg = await Message.findOne(query);
+    if (!msg) return res.status(404).json({ message: 'Message not found' });
+
+    const check = canModifyMessage(req.user, msg);
+    if (!check.allowed) return res.status(403).json({ message: check.reason });
+
+    const { content } = req.body;
+    if (typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ message: 'Content is required' });
+    }
+
+    msg.content = content.trim();
+    msg.editedAt = new Date();
+    await msg.save();
+    emitToCompany('message:change', msg.companyId, { action: 'update', id: msg.messageId || msg.id });
+    res.status(200).json(msg);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -121,9 +173,16 @@ export const getAllMessages = async (_req, res) => {
 export const deleteMessage = async (req, res) => {
   try {
     const id = req.params.id;
-    const query = { $or: [{ messageId: id }, { id }, { _id: id }] };
-    const msg = await Message.findOneAndDelete(query);
+    const baseQuery = { $or: [{ messageId: id }, { id }, { _id: id }] };
+    const query = req.companyId ? { ...baseQuery, companyId: req.companyId } : baseQuery;
+    const msg = await Message.findOne(query);
     if (!msg) return res.status(404).json({ message: 'Message not found' });
+
+    const check = canModifyMessage(req.user, msg);
+    if (!check.allowed) return res.status(403).json({ message: check.reason });
+
+    await Message.deleteOne({ _id: msg._id });
+    emitToCompany('message:change', msg.companyId, { action: 'delete', id: msg.messageId || msg.id });
     res.status(200).json({ message: 'Message deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

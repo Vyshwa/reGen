@@ -1,8 +1,11 @@
 import Holiday from '../models/Holiday.js';
+import { resolveCompanyId } from '../utils/resolveCompanyId.js';
 
 export const addHoliday = async (req, res) => {
   try {
-    const h = new Holiday(req.body);
+    const body = { ...req.body };
+    body.companyId = await resolveCompanyId(req, body);
+    const h = new Holiday(body);
     await h.save();
     res.status(201).json(h);
   } catch (error) {
@@ -13,7 +16,9 @@ export const addHoliday = async (req, res) => {
 export const updateHoliday = async (req, res) => {
   try {
     const id = req.params.id || req.body.id;
-    const h = await Holiday.findOneAndUpdate({ id }, req.body, { new: true });
+    const filter = { id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const h = await Holiday.findOneAndUpdate(filter, req.body, { new: true });
     if (!h) return res.status(404).json({ message: 'Holiday not found' });
     res.status(200).json(h);
   } catch (error) {
@@ -24,7 +29,9 @@ export const updateHoliday = async (req, res) => {
 export const deleteHoliday = async (req, res) => {
   try {
     const id = req.params.id;
-    const h = await Holiday.findOneAndDelete({ id });
+    const filter = { id };
+    if (req.companyId) filter.companyId = req.companyId;
+    const h = await Holiday.findOneAndDelete(filter);
     if (!h) return res.status(404).json({ message: 'Holiday not found' });
     res.status(200).json({ message: 'Holiday deleted' });
   } catch (error) {
@@ -32,9 +39,10 @@ export const deleteHoliday = async (req, res) => {
   }
 };
 
-export const getAllHolidays = async (_req, res) => {
+export const getAllHolidays = async (req, res) => {
   try {
-    const holidays = await Holiday.find().sort({ date: 1 });
+    const filter = req.companyId ? { companyId: req.companyId } : {};
+    const holidays = await Holiday.find(filter).sort({ date: 1 });
     res.status(200).json(holidays);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -54,14 +62,18 @@ export const seedSundays = async (req, res) => {
     }
 
     const ops = [];
+    const companyId = req.companyId || null;
     for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
       if (d.getUTCDay() === 0) {
         const dateStr = d.toISOString().slice(0, 10);
-        const id = `holiday-sunday-${dateStr}`;
+        const idSuffix = companyId ? `-${companyId}` : '';
+        const id = `holiday-sunday-${dateStr}${idSuffix}`;
+        const doc = { id, name, date: dateStr };
+        if (companyId) doc.companyId = companyId;
         ops.push({
           updateOne: {
             filter: { id },
-            update: { $set: { id, name, date: dateStr } },
+            update: { $set: doc },
             upsert: true
           }
         });

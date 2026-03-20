@@ -5,15 +5,16 @@ import { Principal } from '@dfinity/principal';
 // User Profile Queries
 export function useGetCallerUserProfile() {
   const { actor, isFetching: actorFetching } = useActor();
+  const currentUser = typeof window !== 'undefined' ? localStorage.getItem('current_user') : null;
 
   const query = useQuery({
-    queryKey: ['currentUserProfile'],
+    queryKey: ['currentUserProfile', currentUser],
     queryFn: async () => {
       if (!actor) throw new Error('Actor not available');
       return actor.getCallerUserProfile();
     },
-    enabled: !!actor && !actorFetching,
-    retry: false,
+    enabled: !!actor && !actorFetching && !!currentUser,
+    retry: 1,
   });
 
   return {
@@ -423,6 +424,113 @@ export function useEditMessage() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });
     }
+  });
+}
+
+// ─── Direct Message (Private Chat) Queries ──────────────────────
+export function useGetMyConversations() {
+  const { actor } = useActor();
+  return useQuery({
+    queryKey: ['dm-conversations'],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getMyConversations();
+    },
+    enabled: !!actor,
+  });
+}
+
+export function useGetConversationMessages(conversationId) {
+  const { actor } = useActor();
+  return useQuery({
+    queryKey: ['dm-messages', conversationId],
+    queryFn: async () => {
+      if (!actor || !conversationId) return [];
+      return actor.getConversationMessages(conversationId);
+    },
+    enabled: !!actor && !!conversationId,
+  });
+}
+
+export function useGetOrCreateConversation() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (recipientId) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.getOrCreateConversation(recipientId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+    },
+  });
+}
+
+export function useSendDirectMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ conversationId, message }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.sendDirectMessage(conversationId, message);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['dm-messages', variables.conversationId] });
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+    },
+  });
+}
+
+export function useMarkConversationRead() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (conversationId) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.markConversationRead(conversationId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+    },
+  });
+}
+
+export function useStorePublicKey() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async ({ conversationId, publicKey }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.storePublicKey(conversationId, publicKey);
+    },
+  });
+}
+
+export function useEditDirectMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, payload }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.editDirectMessage(messageId, payload);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['dm-messages'] });
+    },
+  });
+}
+
+export function useDeleteDirectMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (messageId) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.deleteDirectMessage(messageId);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['dm-messages'] });
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
+    },
   });
 }
 

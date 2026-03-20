@@ -21,6 +21,8 @@ const EVENT_TO_QUERY_KEYS = {
   'task:change':       [['tasks']],
   'message:change':    [['messages']],
   'scrum:change':      [['scrumNotes']],
+  'dm:change':         [['dm-conversations'], ['dm-messages']],
+  'dm:key-exchange':   [['dm-conversations']],
 };
 
 /**
@@ -78,6 +80,16 @@ export function useSocket() {
         }
       });
     }
+
+    // Force logout when company is blocked by SuperAdmin
+    socket.on('company:blocked', (payload) => {
+      // Clear all auth state
+      localStorage.removeItem('current_user');
+      localStorage.removeItem('auth_token');
+      // Show alert and redirect to login
+      alert(payload?.message || 'Your company has been blocked. Please contact system admin (ReGen) for assistance.');
+      window.location.href = '/';
+    });
 
     socket.on('connect', () => {
       // eslint-disable-next-line no-console

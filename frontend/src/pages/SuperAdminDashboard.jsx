@@ -1735,8 +1735,8 @@ function TabSystem() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl">
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card className="border-zinc-800 bg-zinc-900/30">
             <CardHeader>
               <CardTitle className="text-lg">Global Environment</CardTitle>
@@ -1838,6 +1838,8 @@ function TabSystem() {
                 </Button>
              </CardContent>
           </Card>
+
+          <Pm2Monitor />
        </div>
 
        <DeploymentControls adminId={adminId} />
@@ -1863,6 +1865,142 @@ function TabSystem() {
           </CardContent>
        </Card>
     </div>
+  );
+}
+
+function Pm2Monitor() {
+  const [processes, setProcesses] = useState([]);
+  const [ts, setTs] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetch2 = () => {
+    authFetch('/api/system/pm2-status')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) { setProcesses(d.processes); setTs(d.timestamp); }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetch2();
+    const iv = setInterval(fetch2, 5000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const fmtMem = (bytes) => {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    return (bytes / 1024).toFixed(0) + ' KB';
+  };
+
+  const fmtUptime = (startMs) => {
+    if (!startMs) return '—';
+    const sec = Math.floor((Date.now() - startMs) / 1000);
+    if (sec < 60) return sec + 's';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (h < 24) return h + 'h ' + m + 'm';
+    const d = Math.floor(h / 24);
+    return d + 'd ' + (h % 24) + 'h';
+  };
+
+  return (
+    <Card className="border-zinc-800 bg-zinc-900/30">
+      <CardHeader className="flex-row justify-between items-start">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Activity className="w-5 h-5 text-emerald-400" />
+          Process Monitor
+          {loading && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-zinc-600 font-mono">PM2</span>
+          <button
+            onClick={() => { setLoading(true); fetch2(); }}
+            className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded border border-zinc-800 hover:border-zinc-700"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 font-mono text-[11px] max-h-56 overflow-y-auto">
+        {processes.length === 0 && !loading && (
+          <div className="text-center text-zinc-700 py-6">No processes detected</div>
+        )}
+        {processes.map((p, i) => {
+          const statusColors = {
+            online: 'bg-emerald-500',
+            stopping: 'bg-amber-500',
+            stopped: 'bg-red-500',
+            errored: 'bg-red-500',
+            launching: 'bg-blue-500',
+          };
+          const dot = statusColors[p.status] || 'bg-zinc-500';
+          return (
+            <div key={i} className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-2.5 hover:border-zinc-700/60 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${dot} ${p.status === 'online' ? 'animate-pulse' : ''}`} />
+                  <span className="text-white font-bold text-xs">{p.name}</span>
+                  <span className="text-zinc-600 text-[10px]">v{p.version}</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                  p.status === 'online' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                  p.status === 'errored' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                  'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                }`}>{p.status}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                <div className="flex justify-between">
+                  <span className="text-zinc-600">PID</span>
+                  <span className="text-zinc-300">{p.pid}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-600">Mode</span>
+                  <span className="text-zinc-300 capitalize">{p.mode}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-600">CPU</span>
+                  <span className={`font-bold ${p.cpu > 80 ? 'text-red-400' : p.cpu > 40 ? 'text-amber-400' : 'text-emerald-400'}`}>{p.cpu}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-600">Memory</span>
+                  <span className="text-blue-400 font-bold">{fmtMem(p.memory)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-600">Uptime</span>
+                  <span className="text-zinc-300">{fmtUptime(p.uptime)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-600">Restarts</span>
+                  <span className={`font-bold ${p.restarts > 10 ? 'text-red-400' : p.restarts > 3 ? 'text-amber-400' : 'text-zinc-300'}`}>↻ {p.restarts}</span>
+                </div>
+              </div>
+              {/* CPU + Memory mini bar */}
+              <div className="flex gap-2 pt-1">
+                <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden" title={`CPU: ${p.cpu}%`}>
+                  <div className={`h-full rounded-full transition-all duration-500 ${p.cpu > 80 ? 'bg-red-500' : p.cpu > 40 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(p.cpu, 100)}%` }} />
+                </div>
+                <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden" title={`Mem: ${fmtMem(p.memory)}`}>
+                  <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.min((p.memory / 536870912) * 100, 100)}%` }} />
+                </div>
+              </div>
+              <div className="flex justify-between text-[9px] text-zinc-600 -mt-1">
+                <span>CPU</span>
+                <span>MEM (512MB scale)</span>
+              </div>
+            </div>
+          );
+        })}
+        {ts && (
+          <div className="text-center text-[9px] text-zinc-700 pt-1">
+            Last updated: {new Date(ts).toLocaleTimeString()} · Auto-refresh 5s
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

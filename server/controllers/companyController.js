@@ -158,6 +158,16 @@ export const toggleCompanyStatus = async (req, res) => {
 
     company.status = company.status === 'blocked' ? 'active' : 'blocked';
     await company.save();
+
+    // If blocked, emit force-logout to all users of this company
+    if (company.status === 'blocked') {
+      emitToCompany('company:blocked', company._id, {
+        companyId: company._id.toString(),
+        companyName: company.name,
+        message: 'Your company has been blocked by the system administrator. Please contact ReGen for assistance.'
+      });
+    }
+
     res.status(200).json(company);
   } catch (error) {
     res.status(400).json({ message: error.message });

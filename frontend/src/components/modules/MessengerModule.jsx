@@ -9,10 +9,12 @@ import { Badge } from '@/components/ui/badge';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Principal } from '@dfinity/principal';
-import { Send, Paperclip, X, Pencil, Trash2, Search, ChevronUp, ChevronDown, Check } from 'lucide-react';
+import { Send, Paperclip, X, Pencil, Trash2, Search, ChevronUp, ChevronDown, Check, Users, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import PrivateChatModule from './PrivateChatModule';
 
 export default function MessengerModule({ userProfile }) {
+  const [chatMode, setChatMode] = useState('private'); // 'team' | 'private'
   const { identity } = useCustomAuth();
   const { data: messages = [], isLoading } = useGetAllMessages();
   const sendMessage = useSendMessage();
@@ -265,9 +267,34 @@ export default function MessengerModule({ userProfile }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Workspace Messenger</h2>
+        <h2 className="text-2xl font-bold">Messenger</h2>
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          <Button
+            variant={chatMode === 'private' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setChatMode('private')}
+            className="h-8 px-3 text-xs gap-1.5"
+          >
+            <Lock className="h-3.5 w-3.5" /> Private
+          </Button>
+          <Button
+            variant={chatMode === 'team' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setChatMode('team')}
+            className="h-8 px-3 text-xs gap-1.5"
+          >
+            <Users className="h-3.5 w-3.5" /> Team
+          </Button>
+        </div>
+      </div>
+
+      {chatMode === 'private' ? (
+        <PrivateChatModule userProfile={userProfile} />
+      ) : (
+      <>
+      <div className="flex items-center justify-end">
         <Button variant="ghost" size="icon" onClick={() => { setSearchOpen(o => !o); setSearchTerm(''); setCurrentMatchIndex(0); }}>
           <Search className="h-5 w-5" />
         </Button>
@@ -479,6 +506,8 @@ export default function MessengerModule({ userProfile }) {
           </form>
         </CardFooter>
       </Card>
+      </>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useCustomAuth } from './useCustomAuth';
 import { Principal } from '@dfinity/principal';
 
@@ -859,7 +859,7 @@ export const createHttpActor = (identity) => {
         };
         return handleResponse(await fetch(`${API_BASE}/scrum`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(payload)
         }));
     },
@@ -879,7 +879,7 @@ export const createHttpActor = (identity) => {
         };
         return handleResponse(await fetch(`${API_BASE}/scrum/${note.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(payload)
         }));
     },
@@ -887,34 +887,35 @@ export const createHttpActor = (identity) => {
     getAllTaskUpdates: async () => [],
     addTaskUpdate: async () => {},
     getAllHolidays: async () => {
-        return handleResponse(await fetch(`${API_BASE}/holidays`));
+        return handleResponse(await fetch(`${API_BASE}/holidays`, { headers }));
     },
     addHoliday: async (holiday) => {
         return handleResponse(await fetch(`${API_BASE}/holidays`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(holiday)
         }));
     },
     updateHoliday: async (holiday) => {
         return handleResponse(await fetch(`${API_BASE}/holidays/${holiday.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(holiday)
         }));
     },
     deleteHoliday: async (id) => {
         return handleResponse(await fetch(`${API_BASE}/holidays/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers
         }));
     },
     // Leaves
     getAllLeaveRequests: async () => {
-        return handleResponse(await fetch(`${API_BASE}/leaves`));
+        return handleResponse(await fetch(`${API_BASE}/leaves`, { headers }));
     },
     getUserLeaveRequests: async (userId) => {
         const idStr = typeof userId === 'string' ? userId : (userId?.toText ? userId.toText() : String(userId));
-        return handleResponse(await fetch(`${API_BASE}/leaves/user/${idStr}`));
+        return handleResponse(await fetch(`${API_BASE}/leaves/user/${idStr}`, { headers }));
     },
     applyLeave: async (leave) => {
         const uid =
@@ -932,14 +933,14 @@ export const createHttpActor = (identity) => {
         };
         return handleResponse(await fetch(`${API_BASE}/leaves`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(payload)
         }));
     },
     updateLeaveRequest: async (id, status) => {
         return handleResponse(await fetch(`${API_BASE}/leaves/${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ status })
         }));
     },
@@ -951,38 +952,79 @@ export const createHttpActor = (identity) => {
 
     isCallerAdmin: async () => {
        // Fetch user profile and check role
-       const users = await handleResponse(await fetch(`${API_BASE}/users`));
+       const users = await handleResponse(await fetch(`${API_BASE}/users`, { headers }));
        const user = users.find((u) => u.id === principalId);
        return user?.role === 'admin';
+    },
+
+    // ─── Direct Messages (Private Chat) ─────────────────────────
+    getOrCreateConversation: async (recipientId) => {
+        return handleResponse(await fetch(`${API_BASE}/dm/conversations`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ recipientId })
+        }));
+    },
+    getMyConversations: async () => {
+        return fetchJson(`${API_BASE}/dm/conversations`, []);
+    },
+    getConversationMessages: async (conversationId, { limit, before } = {}) => {
+        const params = new URLSearchParams();
+        if (limit) params.set('limit', limit);
+        if (before) params.set('before', before);
+        const qs = params.toString();
+        return fetchJson(`${API_BASE}/dm/conversations/${conversationId}/messages${qs ? '?' + qs : ''}`, []);
+    },
+    sendDirectMessage: async (conversationId, message) => {
+        return handleResponse(await fetch(`${API_BASE}/dm/conversations/${conversationId}/messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(message)
+        }));
+    },
+    markConversationRead: async (conversationId) => {
+        return handleResponse(await fetch(`${API_BASE}/dm/conversations/${conversationId}/read`, {
+            method: 'PUT',
+            headers
+        }));
+    },
+    storePublicKey: async (conversationId, publicKey) => {
+        return handleResponse(await fetch(`${API_BASE}/dm/conversations/${conversationId}/keys`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ publicKey: JSON.stringify(publicKey) })
+        }));
+    },
+    editDirectMessage: async (messageId, payload) => {
+        return handleResponse(await fetch(`${API_BASE}/dm/messages/${messageId}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(payload)
+        }));
+    },
+    deleteDirectMessage: async (messageId) => {
+        return handleResponse(await fetch(`${API_BASE}/dm/messages/${messageId}`, {
+            method: 'DELETE',
+            headers
+        }));
     }
   };
 };
 
 export const useActor = () => {
   const { identity, isAuthenticated } = useCustomAuth();
-  const [actor, setActor] = useState(null);
-  const [isFetching, setIsFetching] = useState(false);
 
-  useEffect(() => {
-    const initActor = async () => {
-      if (isAuthenticated && identity) {
-        setIsFetching(true);
-        try {
-          // Use HTTP actor instead of mock
-          const httpActor = createHttpActor(identity);
-          setActor(httpActor);
-        } catch (e) {
-          console.error("Error creating actor", e);
-        } finally {
-          setIsFetching(false);
-        }
-      } else {
-        setActor(null);
+  const actor = useMemo(() => {
+    if (isAuthenticated && identity) {
+      try {
+        return createHttpActor(identity);
+      } catch (e) {
+        console.error('Error creating actor', e);
+        return null;
       }
-    };
-
-    initActor();
+    }
+    return null;
   }, [identity, isAuthenticated]);
 
-  return { actor, isFetching };
+  return { actor, isFetching: false };
 };

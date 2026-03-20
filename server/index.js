@@ -18,6 +18,7 @@ import companyRoutes from './routes/company.js';
 import leavesRoutes from './routes/leaves.js';
 import notificationRoutes from './routes/notifications.js';
 import messageRoutes from './routes/messages.js';
+import dmRoutes from './routes/dm.js';
 import meetingNoteRoutes from './routes/meetingNotes.js';
 import scrumRoutes from './routes/scrum.js';
 import holidayRoutes from './routes/holidays.js';
@@ -243,6 +244,15 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
+    // Check if user's company is blocked (skip for SuperAdmin/param)
+    if (user.role !== 'param' && user.companyId) {
+      const Company = (await import('./models/Company.js')).default;
+      const company = await Company.findById(user.companyId).lean();
+      if (company && company.status === 'blocked') {
+        return res.status(403).json({ message: 'Your company has been blocked. Please contact system admin (ReGen) for assistance.', code: 'COMPANY_BLOCKED' });
+      }
+    }
+
     const payload = user.toObject();
     delete payload.password;
     if (payload.mustChangePassword === undefined) payload.mustChangePassword = false;
@@ -290,7 +300,7 @@ app.post('/api/auth/change-password', async (req, res) => {
 });
 
 // Admin resets a user's password directly (no admin password prompt needed)
-app.post('/api/auth/admin-reset-password', async (req, res) => {
+app.post('/api/auth/admin-reset-password', verifyToken, async (req, res) => {
   try {
     const adminId = String(req.user?.userId || '').trim();
     const targetIdentifier = String(req.body?.targetIdentifier || '').trim();
@@ -507,6 +517,7 @@ app.get('/api/health', (req, res) => {
 });
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/dm', dmRoutes);
 app.use('/api/meeting-notes', meetingNoteRoutes);
 app.use('/api/scrum', scrumRoutes);
 app.use('/api/holidays', holidayRoutes);
@@ -622,6 +633,29 @@ app.post('/api/system/restart', async (req, res) => {
     }, 1000);
   } catch (e) {
     res.status(500).json({ message: e.message });
+  }
+});
+
+app.get('/api/system/pm2-status', async (req, res) => {
+  if (!(await isSuperAdmin(req))) return res.status(403).json({ message: 'Forbidden' });
+  try {
+    const { stdout } = await execAsync('pm2 jlist', { timeout: 5000 });
+    const processes = JSON.parse(stdout);
+    const data = processes.map(p => ({
+      name: p.name,
+      pid: p.pid,
+      status: p.pm2_env?.status || 'unknown',
+      cpu: p.monit?.cpu ?? 0,
+      memory: p.monit?.memory ?? 0,
+      uptime: p.pm2_env?.pm_uptime ?? 0,
+      restarts: p.pm2_env?.restart_time ?? 0,
+      version: p.pm2_env?.version || '—',
+      node: p.pm2_env?.node_version || '—',
+      mode: p.pm2_env?.exec_mode === 'cluster_mode' ? 'cluster' : 'fork',
+    }));
+    res.json({ success: true, processes: data, timestamp: Date.now() });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
 });
 

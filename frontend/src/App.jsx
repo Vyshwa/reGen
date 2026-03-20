@@ -133,10 +133,30 @@ export default function App() {
     );
   }
 
+  // Authenticated but profile failed — offer retry instead of showing login again
+  if (isAuthenticated) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <div className="flex h-screen items-center justify-center bg-background">
+          <div className="text-center space-y-4">
+            <p className="text-muted-foreground">Could not load your profile.</p>
+            <button
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <LoginPage />
       <Toaster />
     </ThemeProvider>
-  );
+    );
 }

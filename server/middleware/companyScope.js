@@ -48,6 +48,15 @@ export const companyScope = async (req, res, next) => {
       return next();
     }
 
+    // Check if company is blocked (skip for SuperAdmin/param)
+    if (user.role !== 'param') {
+      const { default: Company } = await import('../models/Company.js');
+      const company = await Company.findById(user.companyId).lean();
+      if (company && company.status === 'blocked') {
+        return res.status(403).json({ message: 'Your company has been blocked. Please contact system admin (ReGen) for assistance.', code: 'COMPANY_BLOCKED' });
+      }
+    }
+
     req.companyId = user.companyId;
     next();
   } catch (err) {

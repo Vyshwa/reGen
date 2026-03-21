@@ -39,9 +39,12 @@ export default function DashboardHome({ userProfile, onNavigate }) {
     const rk = Object.keys(u.role)[0];
     return rk !== 'param';
   });
-  const myDepartmentStaff = userProfile.department 
-    ? myCompanyEmployees.filter(u => u.department === userProfile.department)
-    : myCompanyEmployees;
+  // Owners see ALL company employees; staff-level users see only their department
+  const myDepartmentStaff = (isOwner || isAdmin)
+    ? myCompanyEmployees
+    : (userProfile.department 
+        ? myCompanyEmployees.filter(u => u.department === userProfile.department)
+        : myCompanyEmployees);
     
   const activeMyStaffToday = new Set(
     todayAttendance.filter(a => {
@@ -49,7 +52,7 @@ export default function DashboardHome({ userProfile, onNavigate }) {
       if (!user) return false;
       const rk = Object.keys(user.role)[0];
       if (rk === 'param') return false;
-      return userProfile.department ? user.department === userProfile.department : true;
+      return (isOwner || isAdmin) ? true : (userProfile.department ? user.department === userProfile.department : true);
     }).map(a => a.userId.toText())
   ).size;
 

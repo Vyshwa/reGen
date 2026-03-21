@@ -26,13 +26,18 @@ const BACKUPS_DIR = path.resolve(__dirname, '..', '..', 'backups');
 
 export const createCompany = async (req, res) => {
   try {
-    const ownerId = req.user?.userId || req.body.ownerId;
+    // Only SuperAdmin (param) can create companies directly
+    if (!req.user || req.user.role !== 'param') {
+      return res.status(403).json({ message: 'Only SuperAdmin can create companies' });
+    }
+
+    const ownerId = req.body.ownerId || req.user?.userId;
     if (!ownerId) return res.status(400).json({ message: 'Owner ID is required' });
 
-    // Enforce 5 company limit
+    // Enforce 5 company limit per owner
     const count = await Company.countDocuments({ ownerId });
     if (count >= 5) {
-      return res.status(403).json({ message: 'You have reached the maximum limit of 5 companies.' });
+      return res.status(403).json({ message: 'Maximum limit of 5 companies reached for this owner.' });
     }
 
     const company = new Company({ ...req.body, ownerId });
@@ -123,9 +128,30 @@ export const superAdminCreateCompany = async (req, res) => {
 export const updateCompany = async (req, res) => {
   try {
     const { id } = req.params;
-    const ownerId = req.user?.userId;
-    const company = await Company.findOneAndUpdate({ _id: id, ownerId }, req.body, { new: true });
-    if (!company) return res.status(404).json({ message: 'Company not found or access denied' });
+    const userRole = req.user?.role;
+    const userCompanyId = req.companyId ? req.companyId.toString() : null;
+
+    // SuperAdmin can update any company
+    // Owners/admins can only update their own company
+    if (userRole === 'param') {
+      // allowed
+    } else if (userRole === 'owner' || userRole === 'admin') {
+      if (!userCompanyId || userCompanyId !== id) {
+        return res.status(403).json({ message: 'You can only edit your own company profile' });
+      }
+    } else {
+      return res.status(403).json({ message: 'Only owners and admins can update company profiles' });
+    }
+
+    // Prevent non-param from changing sensitive fields
+    const updates = { ...req.body };
+    if (userRole !== 'param') {
+      delete updates.ownerId;
+      delete updates.status;
+    }
+
+    const company = await Company.findByIdAndUpdate(id, updates, { new: true });
+    if (!company) return res.status(404).json({ message: 'Company not found' });
     res.status(200).json(company);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -436,13 +462,18 @@ export const restoreCompany = async (req, res) => {
 
 export const getAllCompanies = async (req, res) => {
   try {
-    // SuperAdmin sees all companies; owners see only their own
     let query = {};
     if (req.user && req.user.role === 'param') {
-      query = {}; // no filter — sees everything
+      // SuperAdmin sees all companies
+      query = {};
+    } else if (req.companyId) {
+      // All other users see only their own company
+      query = { _id: req.companyId };
     } else {
+      // Fallback: owner without companyId set yet
       const ownerId = req.user?.userId;
       if (ownerId) query = { ownerId };
+      else return res.status(200).json([]);
     }
     const companies = await Company.find(query);
     res.status(200).json(companies);

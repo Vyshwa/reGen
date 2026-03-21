@@ -177,8 +177,7 @@ export default function CompanyModule({ userProfile }) {
         await updateCompany.mutateAsync({ id: currentCompany._id, info });
         toast.success('Company profile updated');
       } else {
-        await createCompany.mutateAsync(info);
-        toast.success('New company created successfully');
+        toast.error('Only SuperAdmin can create new companies');
       }
     } catch (error) {
       toast.error(error.message || 'Failed to save company information');
@@ -186,31 +185,22 @@ export default function CompanyModule({ userProfile }) {
   };
 
   const handleAddNew = () => {
-    if (companies.length >= 5) {
-      toast.error('Maximum limit of 5 companies reached');
-      return;
-    }
-    setSelectedCompanyId(null);
-    setFormData({
-      name: '', address: '', city: '', state: '', zip: '',
-      category: '', about: '', contactEmail: '', contactPhone: '',
-      gst: '', taxDetails: '', policies: DEFAULT_TERMS,
-    });
+    // Only SuperAdmin can create new companies (handled in SuperAdminDashboard)
+    toast.error('Only SuperAdmin can create new companies');
   };
 
   const ownerDepartments = useMemo(() => {
-    if (!isOwner && !isAdmin) return [];
-    // Filter users to the selected company so counts are company-specific
+    // Show departments for all company members
     const companyUsers = selectedCompanyId
       ? users.filter(u => {
           const uid = u.companyId?._id || u.companyId;
           return uid && String(uid) === String(selectedCompanyId);
         })
       : users;
-    const staffUsers = companyUsers.filter(u => u.role && (u.role.hasOwnProperty('staff') || u.role.hasOwnProperty('intern') || u.role.hasOwnProperty('freelancer') || u.role.hasOwnProperty('admin') || u.role.hasOwnProperty('owner')));
+    const allCompanyUsers = companyUsers.filter(u => u.role && (u.role.hasOwnProperty('staff') || u.role.hasOwnProperty('intern') || u.role.hasOwnProperty('freelancer') || u.role.hasOwnProperty('admin') || u.role.hasOwnProperty('owner')));
     const deptMap = new Map();
 
-    staffUsers.forEach(u => {
+    allCompanyUsers.forEach(u => {
       const deptKey = u.department || 'Unassigned';
       if (!deptMap.has(deptKey)) {
         deptMap.set(deptKey, { department: deptKey, staff: [] });
@@ -221,7 +211,7 @@ export default function CompanyModule({ userProfile }) {
     return Array.from(deptMap.values()).sort((a, b) =>
       a.department.localeCompare(b.department),
     );
-  }, [users, isOwner, isAdmin, selectedCompanyId]);
+  }, [users, selectedCompanyId]);
 
   const departmentCards = useMemo(() => {
     return ownerDepartments.map(dept => {
@@ -241,27 +231,26 @@ export default function CompanyModule({ userProfile }) {
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">
-          {isOwner || isAdmin ? 'Department Overview' : 'Company Details'}
+          {isOwner || isAdmin ? 'Company Overview' : 'Company Details'}
         </h2>
         <div className="flex gap-2">
-          {(isAdmin || isOwner) && (
-            <Button onClick={handleSubmit} disabled={updateCompany.isPending || createCompany.isPending}>
-              {updateCompany.isPending || createCompany.isPending ? 'Saving...' : currentCompany ? 'Update Company' : 'Save Company'}
+          {(isAdmin || isOwner) && currentCompany && (
+            <Button onClick={handleSubmit} disabled={updateCompany.isPending}>
+              {updateCompany.isPending ? 'Saving...' : 'Update Company'}
             </Button>
           )}
         </div>
       </div>
 
-      <Tabs defaultValue={(isOwner || isAdmin) ? "dashboard" : "profile"} className="w-full">
-        <TabsList className={`grid w-full ${(isOwner || isAdmin) ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          {(isOwner || isAdmin) && <TabsTrigger value="dashboard">Dashboard</TabsTrigger>}
+      <Tabs defaultValue="dashboard" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="terms">Terms & Conditions</TabsTrigger>
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
         
-        {(isOwner || isAdmin) && (
-          <TabsContent value="dashboard" className="space-y-6 mt-4">
+        <TabsContent value="dashboard" className="space-y-6 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="bg-primary/5 border-primary/10">
                 <CardContent className="p-6 flex items-center gap-4">
@@ -336,12 +325,11 @@ export default function CompanyModule({ userProfile }) {
               </CardContent>
             </Card>
           </TabsContent>
-        )}
         
         <TabsContent value="profile" className="space-y-6 mt-4">
-          {(isOwner || isAdmin) && companies.length > 0 && (
+          {userProfile.role.hasOwnProperty('param') && companies.length > 1 && (
             <div className="space-y-3">
-              <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Managed Companies ({companies.length}/5)</Label>
+              <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Managed Companies ({companies.length})</Label>
               <div className="flex flex-wrap gap-3">
                 {companies.map(co => (
                   <button
@@ -366,7 +354,7 @@ export default function CompanyModule({ userProfile }) {
             <CardHeader className="border-b border-border pb-4">
               <CardTitle className="text-xl flex items-center gap-3 uppercase tracking-tight">
                 <ShieldCheck className="w-6 h-6 text-primary" />
-                {currentCompany ? 'Core Business Profile' : 'Register New Company'}
+                Core Business Profile
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">

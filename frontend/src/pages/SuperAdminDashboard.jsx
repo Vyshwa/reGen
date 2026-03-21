@@ -100,6 +100,7 @@ export default function SuperAdminDashboard() {
       const token = localStorage.getItem('sa_auth_token');
       const saId = localStorage.getItem('active_sa_id');
       if (!token || !saId) return;
+      localStorage.setItem('auth_token', token);
       try {
         // Validate token by fetching the user profile
         const resp = await authFetch(`/api/users/${saId}`);
@@ -223,23 +224,29 @@ export default function SuperAdminDashboard() {
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Admin ID</label>
+                <label htmlFor="saAdminId" className="text-sm font-medium text-zinc-300">Admin ID</label>
                 <Input 
+                  id="saAdminId"
+                  name="adminId"
                   placeholder="ID" 
                   className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500"
                   value={loginForm.id}
                   onChange={(e) => setLoginForm({ ...loginForm, id: e.target.value })}
+                  autoComplete="username"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-300">Security Password</label>
+                <label htmlFor="saPassword" className="text-sm font-medium text-zinc-300">Security Password</label>
                 <Input 
+                  id="saPassword"
+                  name="password"
                   type="password" 
                   placeholder="••••••••" 
                   className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  autoComplete="current-password"
                   required
                 />
               </div>
@@ -1386,6 +1393,7 @@ function TabUsers({ dbUsers, searchTerm }) {
             <TableHeader className="bg-zinc-900/50">
               <TableRow className="border-zinc-800">
                 <TableHead>User</TableHead>
+                <TableHead>Mobile</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
@@ -1406,6 +1414,7 @@ function TabUsers({ dbUsers, searchTerm }) {
                       </div>
                     </div>
                   </TableCell>
+                  <TableCell className="text-zinc-400">{user.phone || user.contact || '—'}</TableCell>
                   <TableCell className="text-zinc-400">{user.department || 'General'}</TableCell>
                   <TableCell>
                     <span className="text-xs bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700 capitalize">{user.role}</span>
@@ -1422,7 +1431,7 @@ function TabUsers({ dbUsers, searchTerm }) {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-zinc-500">No users found</TableCell>
+                  <TableCell colSpan={6} className="text-center py-10 text-zinc-500">No users found</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -1614,6 +1623,17 @@ function TabSystem() {
 
   const adminId = localStorage.getItem('active_sa_id');
 
+  const askOtp = () => {
+    const code = window.prompt('Enter 6-digit authenticator app code');
+    if (code === null) return null;
+    const otpCode = String(code).trim();
+    if (!/^\d{6}$/.test(otpCode)) {
+      toast.error('Please enter a valid 6-digit authenticator code');
+      return null;
+    }
+    return otpCode;
+  };
+
   const fetchMaintenance = () => {
     authFetch('/api/system/maintenance')
       .then(res => res.json())
@@ -1641,11 +1661,15 @@ function TabSystem() {
   }, []);
 
   const toggleMaintenance = async () => {
+    const otpCode = askOtp();
+    if (!otpCode) return;
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
       const resp = await authFetch('/api/system/maintenance/toggle', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode })
       });
       const data = await resp.json();
       if (data.success) {
@@ -1662,11 +1686,15 @@ function TabSystem() {
   };
 
   const handleFlushCache = async () => {
+    const otpCode = askOtp();
+    if (!otpCode) return;
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
       const resp = await authFetch('/api/system/flush-cache', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode })
       });
       const data = await resp.json();
       if (data.success) {
@@ -1682,11 +1710,15 @@ function TabSystem() {
   };
 
   const handleRestartModules = async () => {
+    const otpCode = askOtp();
+    if (!otpCode) return;
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
       const resp = await authFetch('/api/system/restart', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode })
       });
       const data = await resp.json();
       if (data.success) {
@@ -1714,11 +1746,16 @@ function TabSystem() {
       return;
     }
 
+    const otpCode = askOtp();
+    if (!otpCode) return;
+
     setIsLoading(true);
     try {
       const adminId = localStorage.getItem('active_sa_id');
       const resp = await authFetch('/api/system/factory-reset', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode })
       });
       const data = await resp.json();
       if (data.success) {
@@ -2009,13 +2046,27 @@ function DeploymentControls({ adminId }) {
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployLog, setDeployLog] = useState('');
 
+  const askOtp = () => {
+    const code = window.prompt('Enter 6-digit authenticator app code');
+    if (code === null) return null;
+    const otpCode = String(code).trim();
+    if (!/^\d{6}$/.test(otpCode)) {
+      toast.error('Please enter a valid 6-digit authenticator code');
+      return null;
+    }
+    return otpCode;
+  };
+
   const handleGitPull = async () => {
+    const otpCode = askOtp();
+    if (!otpCode) return;
     setIsPulling(true);
     setDeployLog('');
     try {
       const res = await authFetch('/api/deploy/git-pull', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode })
       });
       const data = await res.json();
       setDeployLog(data.output || data.message || 'Done');
@@ -2030,12 +2081,15 @@ function DeploymentControls({ adminId }) {
   };
 
   const handleRebuildDeploy = async () => {
+    const otpCode = askOtp();
+    if (!otpCode) return;
     setIsDeploying(true);
     setDeployLog('');
     try {
       const res = await authFetch('/api/deploy/rebuild', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otpCode })
       });
       const data = await res.json();
       setDeployLog(data.output || data.message || 'Done');

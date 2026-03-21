@@ -10,7 +10,10 @@ export function cn(...inputs) {
  * Use this for all authenticated API calls.
  */
 export function authFetch(url, options = {}) {
-    const token = localStorage.getItem('auth_token');
+    const isSuperAdminPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/superadmin');
+    const token = isSuperAdminPath
+        ? (localStorage.getItem('sa_auth_token') || localStorage.getItem('auth_token'))
+        : localStorage.getItem('auth_token');
     const headers = { ...(options.headers || {}) };
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;

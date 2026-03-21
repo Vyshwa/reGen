@@ -173,30 +173,36 @@ export default function LoginPage({ resetToken: resetTokenProp }) {
                       <Label htmlFor="resetToken">Reset Token</Label>
                       <Input
                         id="resetToken"
+                        name="resetToken"
                         value={resetToken}
                         onChange={(e) => setResetToken(e.target.value)}
                         placeholder="Paste reset token"
                         className="h-12"
+                        autoComplete="off"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="resetNewPassword">New Password</Label>
                       <Input
                         id="resetNewPassword"
+                        name="newPassword"
                         type="password"
                         value={resetNewPassword}
                         onChange={(e) => setResetNewPassword(e.target.value)}
                         className="h-12"
+                        autoComplete="new-password"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="resetConfirmPassword">Confirm Password</Label>
                       <Input
                         id="resetConfirmPassword"
+                        name="confirmPassword"
                         type="password"
                         value={resetConfirmPassword}
                         onChange={(e) => setResetConfirmPassword(e.target.value)}
                         className="h-12"
+                        autoComplete="new-password"
                       />
                     </div>
                     <Button type="submit" className="w-full h-14 text-lg font-medium rounded-xl shadow-sm" disabled={isResetting}>

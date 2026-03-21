@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Principal } from '@dfinity/principal';
 import { Send, Paperclip, X, Pencil, Trash2, Search, ChevronUp, ChevronDown, Check, Users, Lock } from 'lucide-react';
 import { toast } from 'sonner';
@@ -27,7 +25,7 @@ export default function MessengerModule({ userProfile }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const selectionTimer = useRef(null);
-  const scrollRef = useRef(null);
+  const bottomRef = useRef(null);
 
   // Edit state
   const [editingId, setEditingId] = useState(null);
@@ -40,9 +38,7 @@ export default function MessengerModule({ userProfile }) {
   const matchRefs = useRef([]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
   const handleSend = async (e) => {
@@ -345,7 +341,7 @@ export default function MessengerModule({ userProfile }) {
           <CardTitle>Team Chat</CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col min-h-0">
-          <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
+          <div className="flex-1 overflow-y-auto pr-4">
             <div className="space-y-4">
               {isLoading ? (
                 <p className="text-center py-8 text-muted-foreground">Loading messages...</p>
@@ -459,8 +455,9 @@ export default function MessengerModule({ userProfile }) {
                   );
                 })
               )}
+              <div ref={bottomRef} />
             </div>
-          </ScrollArea>
+          </div>
 
         </CardContent>
         <CardFooter className="sticky bottom-0 bg-background">

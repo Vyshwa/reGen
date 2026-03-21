@@ -291,10 +291,10 @@ export default function CompanyModule({ userProfile }) {
               </Card>
             </div>
 
-            <Card className="border-zinc-800 bg-zinc-900/10">
+            <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <LayoutDashboard className="w-5 h-5 text-zinc-400" />
+                  <LayoutDashboard className="w-5 h-5 text-muted-foreground" />
                   Department Health
                 </CardTitle>
               </CardHeader>
@@ -308,17 +308,17 @@ export default function CompanyModule({ userProfile }) {
                     {departmentCards.map(dept => (
                       <div
                         key={dept.name}
-                        className="border border-zinc-800 rounded-2xl p-5 flex flex-col gap-3 bg-zinc-900/30 hover:bg-zinc-900/50 transition-all group"
+                        className="border border-border rounded-2xl p-5 flex flex-col gap-3 bg-muted/30 hover:bg-muted/50 transition-all group"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold tracking-tight text-white group-hover:text-primary transition-colors">{dept.name}</span>
+                          <span className="font-bold tracking-tight group-hover:text-primary transition-colors">{dept.name}</span>
                         </div>
                         <div className="space-y-2">
                            <div className="flex justify-between text-xs">
-                              <span className="text-zinc-500">Resource Load</span>
-                              <span className="text-zinc-300 font-bold">{dept.totalStaff} Members</span>
+                              <span className="text-muted-foreground">Resource Load</span>
+                              <span className="font-bold">{dept.totalStaff} Members</span>
                            </div>
-                           <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                           <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                               <div className="bg-primary h-full rounded-full" style={{ width: '100%' }} />
                            </div>
                         </div>
@@ -343,10 +343,10 @@ export default function CompanyModule({ userProfile }) {
                     className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition-all ${
                       selectedCompanyId === co._id 
                       ? 'bg-primary/10 border-primary text-primary ring-1 ring-primary/20' 
-                      : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      : 'bg-muted/40 border-border text-muted-foreground hover:border-muted-foreground/30'
                     }`}
                   >
-                    <Building className={`w-4 h-4 ${selectedCompanyId === co._id ? 'text-primary' : 'text-zinc-500'}`} />
+                    <Building className={`w-4 h-4 ${selectedCompanyId === co._id ? 'text-primary' : 'text-muted-foreground'}`} />
                     <span className="text-sm font-semibold">{co.name}</span>
                     {selectedCompanyId === co._id && <Check className="w-3.5 h-3.5 ml-1" />}
                   </button>
@@ -355,8 +355,8 @@ export default function CompanyModule({ userProfile }) {
             </div>
           )}
 
-          <Card className="border-zinc-800 bg-zinc-900/5 backdrop-blur-sm">
-            <CardHeader className="border-b border-zinc-800/50 pb-4">
+          <Card>
+            <CardHeader className="border-b border-border pb-4">
               <CardTitle className="text-xl flex items-center gap-3 uppercase tracking-tight">
                 <ShieldCheck className="w-6 h-6 text-primary" />
                 {currentCompany ? 'Core Business Profile' : 'Register New Company'}

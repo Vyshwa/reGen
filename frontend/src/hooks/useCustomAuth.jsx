@@ -107,6 +107,9 @@ export const CustomAuthProvider = ({ children }) => {
       // Store JWT token
       if (backendUser?.token) {
         localStorage.setItem('auth_token', backendUser.token);
+        if (backendUser?.role !== 'param') {
+          localStorage.removeItem('sa_auth_token');
+        }
       }
     } catch (e) {
       setIsLoggingIn(false);

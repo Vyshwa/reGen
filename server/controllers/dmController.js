@@ -62,12 +62,26 @@ const normalizeAttachment = async (att, seed, index) => {
   return null;
 };
 
+const normalizeIdentifier = (value) => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  if (!value || typeof value !== 'object') return '';
+  if (typeof value.userId === 'string') return value.userId.trim();
+  if (typeof value.id === 'string') return value.id.trim();
+  if (typeof value._text === 'string') return value._text.trim();
+  if (typeof value.toString === 'function') {
+    const text = String(value).trim();
+    if (text && text !== '[object Object]') return text;
+  }
+  return '';
+};
+
 // ─── Get or create a 1:1 conversation ───────────────────────────
 export const getOrCreateConversation = async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req, req.body);
-    const myId = req.user.userId;
-    const { recipientId } = req.body;
+    const myId = normalizeIdentifier(req.user?.userId);
+    const recipientId = normalizeIdentifier(req.body?.recipientId);
     if (!recipientId) return res.status(400).json({ message: 'recipientId is required' });
     if (recipientId === myId) return res.status(400).json({ message: 'Cannot create conversation with yourself' });
 

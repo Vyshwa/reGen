@@ -25,7 +25,8 @@ const userSchema = new mongoose.Schema({
   referralSource: { type: String },
   avatar: { type: String }, 
   lastAvatarUpdate: { type: Date },
-  address: { type: String }
+  address: { type: String },
+  tokenVersion: { type: Number, default: 0 }
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);

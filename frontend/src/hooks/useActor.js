@@ -471,15 +471,27 @@ export const createHttpActor = (identity) => {
 
   return {
     getCallerUserProfile: async () => {
-      const users = await fetchJson(`${API_BASE}/users`, []);
-      const user = users.find((u) => u.userId === principalId || u.username === principalId);
-      if (!user) return null;
-      return {
-          ...user,
+            try {
+                const me = await handleResponse(await fetch(`${API_BASE}/users/me`, { headers }));
+                if (!me) return null;
+                return {
+                    ...me,
+                    avatar: normalizeAvatar(me.avatar),
+                    role: typeof me.role === 'string' ? { [me.role]: null } : me.role,
+                    salary: me.salary ? BigInt(me.salary) : undefined
+                };
+            } catch {
+                // fallback for legacy paths
+                const users = await fetchJson(`${API_BASE}/users`, []);
+                const user = users.find((u) => u.userId === principalId || u.username === principalId);
+                if (!user) return null;
+                return {
+                    ...user,
                     avatar: normalizeAvatar(user.avatar),
-          role: typeof user.role === 'string' ? { [user.role]: null } : user.role,
-          salary: user.salary ? BigInt(user.salary) : undefined
-      };
+                    role: typeof user.role === 'string' ? { [user.role]: null } : user.role,
+                    salary: user.salary ? BigInt(user.salary) : undefined
+                };
+            }
     },
     saveCallerUserProfile: async (profile) => {
       // Resolve stored staff ID first

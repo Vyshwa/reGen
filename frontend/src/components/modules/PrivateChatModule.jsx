@@ -16,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Send, Paperclip, X, ArrowLeft, Search, ShieldCheck, Lock, Pencil, Trash2, Check,
@@ -46,7 +45,7 @@ export default function PrivateChatModule({ userProfile }) {
   const [contactSearch, setContactSearch] = useState('');
   const [sharedKey, setSharedKey] = useState(null);
   const [e2eReady, setE2eReady] = useState(false);
-  const scrollRef = useRef(null);
+  const bottomRef = useRef(null);
 
   // Edit state
   const [editingId, setEditingId] = useState(null);
@@ -58,7 +57,19 @@ export default function PrivateChatModule({ userProfile }) {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const matchRefs = useRef([]);
 
-  const myId = userProfile.userId || userProfile.id;
+  const toIdText = useCallback((value) => {
+    if (typeof value === 'string') return value;
+    if (value?.toText) return value.toText();
+    if (value && typeof value === 'object') {
+      if (typeof value.userId === 'string') return value.userId;
+      if (typeof value.id === 'string') return value.id;
+      if (typeof value._text === 'string') return value._text;
+    }
+    return String(value || '');
+  }, []);
+
+  const myId = toIdText(userProfile.userId || userProfile.id);
+  const markedReadRef = useRef(null);
 
   const { data: rawMessages = [], refetch: refetchMessages } = useGetConversationMessages(activeConvoId);
 
@@ -90,9 +101,9 @@ export default function PrivateChatModule({ userProfile }) {
   // Resolve peer user from a conversation
   const getPeer = useCallback((convo) => {
     if (!convo) return null;
-    const peerId = convo.participants?.find(p => p !== myId);
-    return users.find(u => (u.userId || u.id) === peerId) || { userId: peerId, name: peerId };
-  }, [users, myId]);
+    const peerId = convo.participants?.map(toIdText).find(p => p !== myId);
+    return users.find(u => toIdText(u.userId || u.id) === peerId) || { userId: peerId, name: peerId };
+  }, [users, myId, toIdText]);
 
   const normalizeAvatar = (avatar) => {
     if (!avatar) return '';
@@ -111,12 +122,12 @@ export default function PrivateChatModule({ userProfile }) {
         // 1. Generate our key pair if we don't have one
         if (!hasKeyPair(activeConvoId)) {
           const pubKey = await generateKeyPair(activeConvoId);
+          // storeKey mutation automatically invalidates dm-conversations, so no need to refetch manually
           await storeKey.mutateAsync({ conversationId: activeConvoId, publicKey: pubKey });
-          refetchConvos();
         }
 
         // 2. Check if peer has published their key
-        const peerId = activeConvo.participants?.find(p => p !== myId);
+        const peerId = activeConvo.participants?.map(toIdText).find(p => p !== myId);
         const peerKeyStr = activeConvo.publicKeys?.[peerId];
         if (peerKeyStr) {
           const peerPubJwk = JSON.parse(peerKeyStr);
@@ -139,17 +150,16 @@ export default function PrivateChatModule({ userProfile }) {
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
-  // Mark as read when opening conversation
+  // Mark as read when opening conversation (once per activeConvoId)
   useEffect(() => {
-    if (activeConvoId) {
+    if (activeConvoId && markedReadRef.current !== activeConvoId) {
+      markedReadRef.current = activeConvoId;
       markRead.mutate(activeConvoId);
     }
-  }, [activeConvoId, messages.length]);
+  }, [activeConvoId]);
 
   // ─── Open conversation with a user ─────────────────────────────
   const openChat = async (userId) => {
@@ -255,7 +265,7 @@ export default function PrivateChatModule({ userProfile }) {
     return d.toLocaleDateString();
   };
 
-  const isOwnMessage = (senderId) => myId === senderId;
+  const isOwnMessage = (senderId) => myId === toIdText(senderId);
 
   const toPublicPath = (p) => {
     if (!p) return p;
@@ -309,7 +319,7 @@ export default function PrivateChatModule({ userProfile }) {
   const contactList = useMemo(() => {
     return users
       .filter(u => {
-        const uid = u.userId || u.id;
+        const uid = toIdText(u.userId || u.id);
         if (uid === myId) return false;
         if (contactSearch) {
           const term = contactSearch.toLowerCase();
@@ -319,7 +329,7 @@ export default function PrivateChatModule({ userProfile }) {
         return true;
       })
       .sort((a, b) => (a.name || a.username || '').localeCompare(b.name || b.username || ''));
-  }, [users, myId, contactSearch]);
+  }, [users, myId, contactSearch, toIdText]);
 
   // Conversation list with peer info
   const convoList = useMemo(() => {
@@ -401,7 +411,7 @@ export default function PrivateChatModule({ userProfile }) {
         )}
 
         {/* Messages */}
-        <ScrollArea className="flex-1 pr-2" ref={scrollRef}>
+        <div className="flex-1 overflow-y-auto pr-2">
           <div className="space-y-1 py-2">
             {groupedMessages.map((item, i) => {
               if (item.type === 'date') {
@@ -497,8 +507,9 @@ export default function PrivateChatModule({ userProfile }) {
                 {e2eReady ? '🔒 Messages are end-to-end encrypted. Send the first message!' : 'Start the conversation!'}
               </p>
             )}
+            <div ref={bottomRef} />
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Input */}
         <div className="pt-2 border-t">
@@ -561,7 +572,7 @@ export default function PrivateChatModule({ userProfile }) {
             <p className="text-center py-3 text-sm text-muted-foreground">No users found</p>
           ) : (
             contactList.map(u => {
-              const uid = u.userId || u.id;
+              const uid = toIdText(u.userId || u.id);
               const avatar = normalizeAvatar(u.avatar);
               const initials = (u.name || u.username || '?').slice(0, 2).toUpperCase();
               return (
@@ -599,7 +610,7 @@ export default function PrivateChatModule({ userProfile }) {
       )}
 
       {/* Conversation list */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         {convoList.length === 0 && !contactSearch.trim() ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <MessageSquare className="h-12 w-12 mb-3 opacity-30" />
@@ -636,7 +647,7 @@ export default function PrivateChatModule({ userProfile }) {
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-muted-foreground truncate pr-2">
-                        {lastMsg?.senderId === myId && <span className="text-muted-foreground/70">You: </span>}
+                        {toIdText(lastMsg?.senderId) === myId && <span className="text-muted-foreground/70">You: </span>}
                         {lastMsg?.content || 'No messages yet'}
                       </p>
                       {unread > 0 && (
@@ -651,7 +662,7 @@ export default function PrivateChatModule({ userProfile }) {
             })}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </div>
   );
 }

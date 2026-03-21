@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
 const getSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -8,13 +9,13 @@ const getSecret = () => {
 
 export const signToken = (user) => {
   return jwt.sign(
-    { userId: user.userId, username: user.username, role: user.role, companyId: user.companyId || null },
+    { userId: user.userId, username: user.username, role: user.role, companyId: user.companyId || null, tokenVersion: Number(user.tokenVersion || 0) },
     getSecret(),
     { expiresIn: '7d' }
   );
 };
 
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   // Public routes skip JWT verification
   const publicPaths = [
     '/api/auth/login',
@@ -36,6 +37,15 @@ export const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, getSecret());
+    const dbUser = await User.findOne({ userId: decoded.userId }).select('userId tokenVersion').lean();
+    if (!dbUser) {
+      return res.status(401).json({ message: 'Invalid session. Please login again.' });
+    }
+    const tokenVersion = Number(decoded.tokenVersion || 0);
+    const currentTokenVersion = Number(dbUser.tokenVersion || 0);
+    if (tokenVersion !== currentTokenVersion) {
+      return res.status(401).json({ message: 'Session expired. Please login again.' });
+    }
     req.user = decoded; // { userId, username, role, companyId, iat, exp }
     next();
   } catch (err) {

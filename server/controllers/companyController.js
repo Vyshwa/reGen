@@ -8,6 +8,8 @@ import Message from '../models/Message.js';
 import Notification from '../models/Notification.js';
 import ScrumNote from '../models/ScrumNote.js';
 import Holiday from '../models/Holiday.js';
+import Conversation from '../models/Conversation.js';
+import DirectMessage from '../models/DirectMessage.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -16,6 +18,7 @@ import { fileURLToPath } from 'url';
 import archiver from 'archiver';
 import { TOTP } from 'otpauth';
 import { sendCompanyCredentials } from '../utils/mailer.js';
+import { emitToCompany } from '../socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -161,6 +164,12 @@ export const toggleCompanyStatus = async (req, res) => {
 
     // If blocked, emit force-logout to all users of this company
     if (company.status === 'blocked') {
+      // Revoke existing JWT sessions for all users in this company
+      await User.updateMany(
+        { companyId: company._id, role: { $ne: 'param' } },
+        { $inc: { tokenVersion: 1 } }
+      );
+
       emitToCompany('company:blocked', company._id, {
         companyId: company._id.toString(),
         companyName: company.name,
@@ -228,6 +237,8 @@ export const deleteCompany = async (req, res) => {
       notifications: await Notification.find({ companyId }).lean(),
       scrumNotes: await ScrumNote.find({ companyId }).lean(),
       holidays: await Holiday.find({ companyId }).lean(),
+      conversations: await Conversation.find({ companyId }).lean(),
+      directMessages: await DirectMessage.find({ companyId }).lean(),
     };
 
     // Write the ZIP
@@ -253,6 +264,8 @@ export const deleteCompany = async (req, res) => {
     await Notification.deleteMany({ companyId });
     await ScrumNote.deleteMany({ companyId });
     await Holiday.deleteMany({ companyId });
+    await Conversation.deleteMany({ companyId });
+    await DirectMessage.deleteMany({ companyId });
     await Company.findByIdAndDelete(id);
 
     const counts = {};
@@ -378,6 +391,8 @@ export const restoreCompany = async (req, res) => {
       'notifications.json': Notification,
       'scrumNotes.json': ScrumNote,
       'holidays.json': Holiday,
+      'conversations.json': Conversation,
+      'directMessages.json': DirectMessage,
     };
 
     for (const entry of directory.files) {

@@ -11,7 +11,7 @@ import SuperAdminDashboard from './pages/SuperAdminDashboard';
 
 export default function App() {
   const { identity, isLoggingIn: isInitializing, logout } = useCustomAuth();
-  const { data: userProfile, isLoading: profileLoading, isFetched } = useGetCallerUserProfile();
+  const { data: userProfile, isLoading: profileLoading, isFetched, error: profileError } = useGetCallerUserProfile();
   const [isMaintenance, setIsMaintenance] = useState(false);
 
   // Real-time data sync via WebSocket (connects when auth_token exists)
@@ -53,6 +53,18 @@ export default function App() {
       logout();
     }
   }, [resetToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !profileError) return;
+    const msg = String(profileError?.message || '').toLowerCase();
+    const isAuthError = msg.includes('invalid or expired token')
+      || msg.includes('access token required')
+      || msg.includes('session expired')
+      || msg.includes('invalid session');
+    if (isAuthError) {
+      logout();
+    }
+  }, [isAuthenticated, profileError, logout]);
 
   // Show loading state while initializing
   if (isInitializing) {

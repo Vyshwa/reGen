@@ -9,7 +9,7 @@ const DEFAULT_PASSWORD = '1234';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsDir = path.resolve(__dirname, '..', '..', 'frontend', 'uploads');
+const uploadsDir = path.resolve(__dirname, '..', '..', 'uploads');
 
 const ensureUploadsDir = async () => {
   await fs.promises.mkdir(uploadsDir, { recursive: true });
@@ -149,9 +149,33 @@ export const createUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const filter = req.companyId ? { companyId: req.companyId } : {};
+    const isSuperAdmin = req.user?.role === 'param';
+    if (!isSuperAdmin && !req.companyId) {
+      // Never expose global users to non-superadmin callers
+      return res.status(200).json([]);
+    }
+    const filter = isSuperAdmin ? {} : { companyId: req.companyId };
     const users = await User.find(filter);
     res.status(200).json(users.map(sanitizeUser));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getCurrentUser = async (req, res) => {
+  try {
+    const currentUserId = String(req.user?.userId || '').trim();
+    if (!currentUserId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const isSuperAdmin = req.user?.role === 'param';
+    const filter = { userId: currentUserId };
+    if (!isSuperAdmin && req.companyId) {
+      filter.companyId = req.companyId;
+    }
+
+    const user = await User.findOne(filter);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.status(200).json(sanitizeUser(user));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

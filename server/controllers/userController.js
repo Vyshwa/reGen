@@ -112,6 +112,17 @@ export const createUser = async (req, res) => {
       body.phone = body.contact;
       delete body.contact;
     }
+
+    // Aadhaar validation (mandatory for new users)
+    const aadhaarDigits = (body.aadhaar || '').replace(/\D/g, '');
+    if (!aadhaarDigits || aadhaarDigits.length !== 12) {
+      return res.status(400).json({ message: 'A valid 12-digit Aadhaar number is required' });
+    }
+    if (/^[01]/.test(aadhaarDigits)) {
+      return res.status(400).json({ message: 'Aadhaar number cannot start with 0 or 1' });
+    }
+    body.aadhaar = aadhaarDigits;
+
     const pwdRaw = body.password !== undefined ? String(body.password || '').trim() : '';
     const pwd = pwdRaw || DEFAULT_PASSWORD;
     body.password = await bcrypt.hash(pwd, 10);

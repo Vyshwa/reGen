@@ -27,6 +27,7 @@ export default function UsersModule({ userProfile }) {
     principalId: '',
     username: '',
     password: '1234',
+    aadhaar: '',
     firstName: '',
     lastName: '',
     department: '',
@@ -143,6 +144,16 @@ export default function UsersModule({ userProfile }) {
     return age;
   };
 
+  // Aadhaar helpers
+  const formatAadhaar = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, 12);
+    return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+  };
+  const isValidAadhaar = (value) => {
+    const digits = value.replace(/\D/g, '');
+    return digits.length === 12 && !/^[01]/.test(digits);
+  };
+
   const normalizeDateForInput = (value) => {
     if (!value) return '';
     const s = String(value).trim();
@@ -188,6 +199,7 @@ export default function UsersModule({ userProfile }) {
         principalId: user.userId?.toText ? user.userId.toText() : (user.userId ? String(user.userId) : (user.id?.toText ? user.id.toText() : String(user.id))),
         username: user.username,
         password: '',
+        aadhaar: user.aadhaar || '',
         firstName: fn || '',
         lastName: ln || '',
         department: user.department || '',
@@ -208,6 +220,7 @@ export default function UsersModule({ userProfile }) {
         principalId: '',
         username: '',
         password: '1234',
+        aadhaar: '',
         firstName: '',
         lastName: '',
         department: '',
@@ -265,6 +278,17 @@ export default function UsersModule({ userProfile }) {
       }
     }
 
+    // Aadhaar validation (mandatory)
+    const aadhaarDigits = formData.aadhaar.replace(/\D/g, '');
+    if (!aadhaarDigits || aadhaarDigits.length !== 12) {
+      toast.error('Please enter a valid 12-digit Aadhaar number');
+      return;
+    }
+    if (/^[01]/.test(aadhaarDigits)) {
+      toast.error('Aadhaar number cannot start with 0 or 1');
+      return;
+    }
+
     // Helper to create a fake principal object for custom IDs
     const createPrincipalFromInput = (input) => {
       const trimmed = input.trim();
@@ -279,6 +303,7 @@ export default function UsersModule({ userProfile }) {
         userId: editingUser ? (editingUser.userId || editingUser.id) : createPrincipalFromInput(formData.principalId),
         username: formData.username,
         password: formData.password || undefined,
+        aadhaar: aadhaarDigits,
         firstName: formData.firstName,
         lastName: formData.lastName,
         name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
@@ -385,12 +410,35 @@ export default function UsersModule({ userProfile }) {
                   />
                 </div>
               )}
+              {/* Aadhaar — mandatory, placed before name fields */}
+              <div className="space-y-2">
+                <Label htmlFor="aadhaar">Aadhaar Number *</Label>
+                <Input
+                  id="aadhaar"
+                  tabIndex={2}
+                  value={formData.aadhaar}
+                  onChange={(e) => {
+                    const formatted = formatAadhaar(e.target.value);
+                    setFormData({ ...formData, aadhaar: formatted });
+                  }}
+                  placeholder="XXXX XXXX XXXX"
+                  maxLength={14}
+                  required
+                  className={formData.aadhaar && !isValidAadhaar(formData.aadhaar) ? 'border-destructive focus-visible:ring-destructive' : ''}
+                />
+                {formData.aadhaar && !isValidAadhaar(formData.aadhaar) && (
+                  <p className="text-xs text-destructive">Enter a valid 12-digit Aadhaar number (cannot start with 0 or 1)</p>
+                )}
+                {isValidAadhaar(formData.aadhaar) && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ Valid Aadhaar format — fill the details below from the Aadhaar card</p>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className={`space-y-2 ${editingUser ? 'md:col-span-2' : ''}`}>
                   <Label htmlFor="username">Username *</Label>
                   <Input
                     id="username"
-                    tabIndex={2}
+                    tabIndex={3}
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     required
@@ -401,7 +449,7 @@ export default function UsersModule({ userProfile }) {
                     <Label htmlFor="password">Password *</Label>
                     <Input
                       id="password"
-                      tabIndex={3}
+                      tabIndex={4}
                       type="password"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -416,7 +464,7 @@ export default function UsersModule({ userProfile }) {
                   <Label htmlFor="firstName">First Name *</Label>
                   <Input
                     id="firstName"
-                    tabIndex={4}
+                    tabIndex={5}
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     required
@@ -426,7 +474,7 @@ export default function UsersModule({ userProfile }) {
                   <Label htmlFor="lastName">Last Name *</Label>
                   <Input
                     id="lastName"
-                    tabIndex={5}
+                    tabIndex={6}
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     required
@@ -438,7 +486,7 @@ export default function UsersModule({ userProfile }) {
                   <Label htmlFor="department">Department</Label>
                   <Input
                     id="department"
-                    tabIndex={6}
+                    tabIndex={7}
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                   />
@@ -447,7 +495,7 @@ export default function UsersModule({ userProfile }) {
                   <Label htmlFor="designation">Designation</Label>
                   <Input
                     id="designation"
-                    tabIndex={7}
+                    tabIndex={8}
                     value={formData.designation}
                     onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                   />
@@ -455,20 +503,21 @@ export default function UsersModule({ userProfile }) {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
                   <Input
                     id="dateOfBirth"
-                    tabIndex={8}
+                    tabIndex={9}
                     type="date"
                     value={formData.dateOfBirth}
                     onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="joiningDate">Joining Date</Label>
                   <Input
                     id="joiningDate"
-                    tabIndex={9}
+                    tabIndex={10}
                     type="date"
                     value={formData.joiningDate}
                     onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
@@ -487,7 +536,7 @@ export default function UsersModule({ userProfile }) {
                       }
                     }}
                   >
-                    <SelectTrigger tabIndex={10}>
+                    <SelectTrigger tabIndex={11}>
                       <SelectValue placeholder="Select Gender" />
                     </SelectTrigger>
                     <SelectContent>
@@ -500,7 +549,7 @@ export default function UsersModule({ userProfile }) {
                   <Label htmlFor="phone">Contact Number</Label>
                   <Input
                     id="phone"
-                    tabIndex={11}
+                    tabIndex={12}
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -508,14 +557,15 @@ export default function UsersModule({ userProfile }) {
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="address">Communication Address</Label>
+                  <Label htmlFor="address">Communication Address *</Label>
                   <Textarea
                     id="address"
-                    tabIndex={10}
+                    tabIndex={13}
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="Enter full secondary address if any..."
+                    placeholder="Enter full address as per Aadhaar..."
                     className="min-h-[80px]"
+                    required
                   />
                 </div>
               </div>
@@ -526,7 +576,7 @@ export default function UsersModule({ userProfile }) {
                     value={formData.role}
                     onValueChange={(value) => setFormData({ ...formData, role: value })}
                   >
-                    <SelectTrigger tabIndex={10}>
+                    <SelectTrigger tabIndex={14}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -542,14 +592,14 @@ export default function UsersModule({ userProfile }) {
                   <Label htmlFor="salary">Salary</Label>
                   <Input
                     id="salary"
-                    tabIndex={11}
+                    tabIndex={15}
                     type="number"
                     value={formData.salary}
                     onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
                   />
                 </div>
               </div>
-              <Button type="submit" tabIndex={12} className="w-full" disabled={createUser.isPending || updateUser.isPending}>
+              <Button type="submit" tabIndex={16} className="w-full" disabled={createUser.isPending || updateUser.isPending}>
                 {(createUser.isPending || updateUser.isPending) ? 'Saving...' : 'Save User'}
               </Button>
             </form>

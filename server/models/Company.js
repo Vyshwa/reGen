@@ -13,6 +13,12 @@ const companySchema = new mongoose.Schema({
   zip: { type: String },
   taxDetails: { type: String },
   policies: { type: String },
+  companyPolicies: [{
+    title: { type: String, required: true },
+    content: { type: String, required: true },
+    effectiveDate: { type: String },
+    createdAt: { type: Date, default: Date.now },
+  }],
   ownerId: { type: String, required: true }, // Links to the user who created it (Owner)
   status: { type: String, enum: ['active', 'blocked'], default: 'active' },
 }, { timestamps: true });

@@ -16,6 +16,11 @@ import {
   Check,
   ChevronRight,
   ShieldCheck,
+  Trash2,
+  Pencil,
+  FileText,
+  X,
+  Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -74,6 +79,11 @@ export default function CompanyModule({ userProfile }) {
 
   const isAdmin = userProfile.role.hasOwnProperty('admin');
   const isOwner = userProfile.role.hasOwnProperty('owner') || userProfile.role.hasOwnProperty('param');
+
+  // Policy management state
+  const [policyForm, setPolicyForm] = useState(null); // null = hidden, object = form data
+  const [editingPolicyIdx, setEditingPolicyIdx] = useState(null); // null = adding, number = editing index
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   useEffect(() => {
     if (companies.length > 0 && !selectedCompanyId) {
@@ -187,6 +197,62 @@ export default function CompanyModule({ userProfile }) {
   const handleAddNew = () => {
     // Only SuperAdmin can create new companies (handled in SuperAdminDashboard)
     toast.error('Only SuperAdmin can create new companies');
+  };
+
+  // --- Policy CRUD handlers ---
+  const handleSavePolicy = async () => {
+    if (!policyForm?.title?.trim() || !policyForm?.content?.trim()) {
+      toast.error('Policy title and content are required');
+      return;
+    }
+    if (!currentCompany?._id) return;
+
+    setSavingPolicy(true);
+    try {
+      const existing = currentCompany.companyPolicies || [];
+      let updated;
+      if (editingPolicyIdx !== null) {
+        // Edit existing
+        updated = existing.map((p, i) => i === editingPolicyIdx ? { ...p, title: policyForm.title, content: policyForm.content, effectiveDate: policyForm.effectiveDate } : p);
+      } else {
+        // Add new
+        updated = [...existing, { title: policyForm.title, content: policyForm.content, effectiveDate: policyForm.effectiveDate }];
+      }
+      await updateCompany.mutateAsync({ id: currentCompany._id, info: { companyPolicies: updated } });
+      toast.success(editingPolicyIdx !== null ? 'Policy updated' : 'Policy added');
+      setPolicyForm(null);
+      setEditingPolicyIdx(null);
+    } catch (err) {
+      toast.error(err.message || 'Failed to save policy');
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
+  const handleEditPolicy = (idx) => {
+    const policy = currentCompany?.companyPolicies?.[idx];
+    if (!policy) return;
+    setPolicyForm({
+      title: policy.title || '',
+      content: policy.content || '',
+      effectiveDate: policy.effectiveDate ? policy.effectiveDate.slice(0, 10) : '',
+    });
+    setEditingPolicyIdx(idx);
+  };
+
+  const handleDeletePolicy = async (idx) => {
+    if (!currentCompany?._id) return;
+    const existing = currentCompany.companyPolicies || [];
+    const policy = existing[idx];
+    if (!confirm(`Delete policy "${policy?.title}"?`)) return;
+
+    try {
+      const updated = existing.filter((_, i) => i !== idx);
+      await updateCompany.mutateAsync({ id: currentCompany._id, info: { companyPolicies: updated } });
+      toast.success('Policy deleted');
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete policy');
+    }
   };
 
   const ownerDepartments = useMemo(() => {
@@ -492,60 +558,86 @@ export default function CompanyModule({ userProfile }) {
           <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Company Policies</h3>
               {(isAdmin || isOwner) && (
-                <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
+                <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-400" onClick={() => setPolicyForm({ title: '', content: '', effectiveDate: new Date().toISOString().slice(0, 10) })}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add New Policy
                 </Button>
               )}
           </div>
+
+          {/* Add / Edit Policy Form */}
+          {policyForm && (isAdmin || isOwner) && (
+            <Card className="border-blue-200 dark:border-blue-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">{editingPolicyIdx !== null ? 'Edit Policy' : 'New Policy'}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Policy Title *</Label>
+                    <Input value={policyForm.title} onChange={e => setPolicyForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Remote Work Policy" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Effective Date</Label>
+                    <Input type="date" value={policyForm.effectiveDate} onChange={e => setPolicyForm(f => ({ ...f, effectiveDate: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Policy Content *</Label>
+                  <Textarea value={policyForm.content} onChange={e => setPolicyForm(f => ({ ...f, content: e.target.value }))} placeholder="Describe the policy details..." className="min-h-[120px]" />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => { setPolicyForm(null); setEditingPolicyIdx(null); }}>
+                    <X className="h-4 w-4 mr-1" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSavePolicy} disabled={savingPolicy}>
+                    <Save className="h-4 w-4 mr-1" /> {savingPolicy ? 'Saving...' : 'Save Policy'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Policy List */}
           <Card>
             <CardContent className="p-0">
+              {(!currentCompany?.companyPolicies || currentCompany.companyPolicies.length === 0) ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  <FileText className="mx-auto h-10 w-10 mb-3 opacity-40" />
+                  <p className="text-sm">No policies added yet.</p>
+                  {(isAdmin || isOwner) && <p className="text-xs mt-1">Click "Add New Policy" to create one.</p>}
+                </div>
+              ) : (
                 <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value="item-1" className="px-6">
-                        <AccordionTrigger className="hover:no-underline">
-                            <div className="text-left">
-                                <div className="font-medium">Remote Work Policy</div>
-                                <div className="text-xs text-muted-foreground font-normal mt-1">Effective: January 1, 2023</div>
+                  {currentCompany.companyPolicies.map((policy, idx) => (
+                    <AccordionItem key={policy._id || idx} value={`policy-${idx}`} className={`px-6 ${idx === currentCompany.companyPolicies.length - 1 ? 'border-b-0' : ''}`}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-2">
+                          <div className="text-left">
+                            <div className="font-medium">{policy.title}</div>
+                            <div className="text-xs text-muted-foreground font-normal mt-1">
+                              {policy.effectiveDate ? `Effective: ${new Date(policy.effectiveDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}` : ''}
                             </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                            This policy outlines the guidelines and expectations for employees working remotely. It covers eligibility, communication protocols, equipment, and data security measures.
-                        </AccordionContent>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="text-muted-foreground whitespace-pre-wrap text-sm">{policy.content}</div>
+                        {(isAdmin || isOwner) && (
+                          <div className="flex gap-2 mt-4 pt-3 border-t">
+                            <Button variant="outline" size="sm" onClick={() => handleEditPolicy(idx)}>
+                              <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                            </Button>
+                            <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-950" onClick={() => handleDeletePolicy(idx)}>
+                              <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                            </Button>
+                          </div>
+                        )}
+                      </AccordionContent>
                     </AccordionItem>
-                    <AccordionItem value="item-2" className="px-6">
-                        <AccordionTrigger className="hover:no-underline">
-                            <div className="text-left">
-                                <div className="font-medium">Data Security Policy</div>
-                                <div className="text-xs text-muted-foreground font-normal mt-1">Effective: February 15, 2023</div>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                            Guidelines for protecting company data and sensitive information.
-                        </AccordionContent>
-                    </AccordionItem>
-                     <AccordionItem value="item-3" className="px-6">
-                        <AccordionTrigger className="hover:no-underline">
-                            <div className="text-left">
-                                <div className="font-medium">Travel and Expense Policy</div>
-                                <div className="text-xs text-muted-foreground font-normal mt-1">Effective: March 1, 2023</div>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                            Procedures for business travel and expense reimbursement.
-                        </AccordionContent>
-                    </AccordionItem>
-                     <AccordionItem value="item-4" className="px-6 border-b-0">
-                        <AccordionTrigger className="hover:no-underline">
-                            <div className="text-left">
-                                <div className="font-medium">Code of Conduct</div>
-                                <div className="text-xs text-muted-foreground font-normal mt-1">Effective: April 10, 2023</div>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                            Expected behavior and ethical standards for all employees.
-                        </AccordionContent>
-                    </AccordionItem>
+                  ))}
                 </Accordion>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

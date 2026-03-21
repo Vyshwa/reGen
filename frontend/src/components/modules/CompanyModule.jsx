@@ -229,18 +229,9 @@ export default function CompanyModule({ userProfile }) {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">
-          {isOwner || isAdmin ? 'Company Overview' : 'Company Details'}
-        </h2>
-        <div className="flex gap-2">
-          {(isAdmin || isOwner) && currentCompany && (
-            <Button onClick={handleSubmit} disabled={updateCompany.isPending}>
-              {updateCompany.isPending ? 'Saving...' : 'Update Company'}
-            </Button>
-          )}
-        </div>
-      </div>
+      <h2 className="text-2xl font-bold">
+        {isOwner || isAdmin ? 'Company Overview' : 'Company Details'}
+      </h2>
 
       <Tabs defaultValue="dashboard" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
@@ -351,11 +342,16 @@ export default function CompanyModule({ userProfile }) {
           )}
 
           <Card>
-            <CardHeader className="border-b border-border pb-4">
+            <CardHeader className="border-b border-border pb-4 flex flex-row items-center justify-between">
               <CardTitle className="text-xl flex items-center gap-3 uppercase tracking-tight">
                 <ShieldCheck className="w-6 h-6 text-primary" />
                 Core Business Profile
               </CardTitle>
+              {(isAdmin || isOwner) && currentCompany && (
+                <Button onClick={handleSubmit} disabled={updateCompany.isPending} size="sm">
+                  {updateCompany.isPending ? 'Saving...' : 'Update Company'}
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
                 <div className="space-y-2">

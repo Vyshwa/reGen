@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useGetAllAttendance, useGetUserAttendance, useRecordAttendance, useUpdateAttendance, useGetAllUsers, useGetAllLeaveRequests, useGetUserLeaveRequests, useApplyLeave, useUpdateLeaveRequest, useGetAllTasks } from '../../hooks/useQueries';
 import { useCustomAuth } from '../../hooks/useCustomAuth';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { User, Bell, Clock, Calendar, Download, History, Filter, Search, MapPin, LogIn, LogOut, CheckCircle, ListTodo } from 'lucide-react';
+import { User, Bell, Clock, Calendar, Download, History, Filter, Search, MapPin, LogIn, LogOut, CheckCircle, ListTodo, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Principal } from '@dfinity/principal';
@@ -38,6 +38,16 @@ export default function AttendanceModule({ userProfile }) {
   const [filterDate, setFilterDate] = useState(new Date());
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [leaveForm, setLeaveForm] = useState({ type: 'casual', startDate: '', endDate: '', reason: '' });
+
+  // Admin filter & pagination state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterDept, setFilterDept] = useState('all');
+  const [filterEmployee, setFilterEmployee] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showHistory, setShowHistory] = useState(false);
+  const pageSize = 10;
+
   const greeting = useMemo(() => {
     const h = currentTime.getHours();
     if (h < 12) return 'Good Morning,';
@@ -100,13 +110,106 @@ export default function AttendanceModule({ userProfile }) {
     };
   }, [attendanceData]);
 
-  const getUserDetails = (principalId) => {
+  const getUserDetails = useCallback((principalId) => {
     const pid = typeof principalId === 'string' ? principalId : (principalId?.toText ? principalId.toText() : String(principalId));
     return users.find(u => {
       const uid = u.userId?.toText ? u.userId.toText() : String(u.userId || u.id);
       return uid === pid;
     });
-  };
+  }, [users]);
+
+  // Dynamic department list from users
+  const departments = useMemo(() => {
+    const deptSet = new Set();
+    users.forEach(u => { if (u.department) deptSet.add(u.department); });
+    return [...deptSet].sort();
+  }, [users]);
+
+  // Filtered + paginated attendance for admin view
+  const filteredAttendance = useMemo(() => {
+    let data = [...attendanceData];
+
+    // Date filter — only show selected date unless history mode
+    if (!showHistory) {
+      const dateStr = format(filterDate, 'yyyy-MM-dd');
+      data = data.filter(r => r.date === dateStr);
+    }
+
+    // Status filter
+    if (filterStatus !== 'all') {
+      data = data.filter(r => r.status === filterStatus);
+    }
+
+    // Department filter
+    if (filterDept !== 'all') {
+      data = data.filter(r => {
+        const user = getUserDetails(r.userId);
+        return user?.department === filterDept;
+      });
+    }
+
+    // Employee filter
+    if (filterEmployee !== 'all') {
+      data = data.filter(r => {
+        const pid = typeof r.userId === 'string' ? r.userId : (r.userId?.toText ? r.userId.toText() : String(r.userId));
+        return pid === filterEmployee;
+      });
+    }
+
+    // Search query (name, userId)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      data = data.filter(r => {
+        const user = getUserDetails(r.userId);
+        const name = user?.name?.toLowerCase() || '';
+        const dept = user?.department?.toLowerCase() || '';
+        const uid = typeof r.userId === 'string' ? r.userId : (r.userId?.toText ? r.userId.toText() : String(r.userId));
+        return name.includes(q) || dept.includes(q) || uid.toLowerCase().includes(q);
+      });
+    }
+
+    // Sort by date descending (newest first)
+    data.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    return data;
+  }, [attendanceData, filterDate, filterStatus, filterDept, filterEmployee, searchQuery, showHistory, users]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAttendance.length / pageSize));
+  const paginatedData = filteredAttendance.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterDate, filterStatus, filterDept, filterEmployee, searchQuery, showHistory]);
+
+  // Export CSV handler
+  const handleExport = useCallback(() => {
+    if (filteredAttendance.length === 0) {
+      toast.error('No records to export');
+      return;
+    }
+    const headers = ['Date', 'Employee', 'Department', 'Status', 'Check In', 'Check Out'];
+    const rows = filteredAttendance.map(r => {
+      const user = getUserDetails(r.userId);
+      return [
+        r.date || '',
+        user?.name || 'Unknown',
+        user?.department || '',
+        r.status || '',
+        getCheckInTime(r) || '',
+        getCheckOutTime(r) || '',
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance_${format(filterDate, 'yyyy-MM-dd')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('Attendance report exported');
+  }, [filteredAttendance, filterDate]);
 
   const formatTime = (timeValue) => {
     if (!timeValue) return '--';
@@ -384,13 +487,19 @@ export default function AttendanceModule({ userProfile }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-        <h2 className="text-xl md:text-2xl font-bold leading-tight">Daily Attendance Overview</h2>
+        <h2 className="text-xl md:text-2xl font-bold leading-tight">
+          {showHistory ? 'Attendance History' : 'Daily Attendance Overview'}
+        </h2>
         <div className="flex items-center gap-2">
             <div className="relative flex-1 md:flex-none">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search employees..." className="pl-9 w-full md:w-[250px]" />
+                <Input
+                  placeholder="Search employees..."
+                  className="pl-9 w-full md:w-[250px]"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
             </div>
-            <div className="h-8 w-8 rounded-full bg-muted flex-shrink-0" />
         </div>
       </div>
 
@@ -435,76 +544,103 @@ export default function AttendanceModule({ userProfile }) {
       </div>
 
       {/* Filters and Actions */}
-        <div className="flex flex-col gap-4 justify-between items-start md:items-center">
+      <div className="flex flex-col gap-4 justify-between items-start md:items-center">
         <div className="flex flex-col md:flex-row md:flex-wrap gap-3 w-full">
-          <Button variant="outline" className="w-full md:w-[240px] justify-start text-left font-normal">
-            <Calendar className="mr-2 h-4 w-4" />
-            {format(filterDate, 'PPP')}
-          </Button>
-            
+          <div className="w-full md:w-[240px]">
+            <input
+              type="date"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              value={format(filterDate, 'yyyy-MM-dd')}
+              onChange={(e) => {
+                const d = new Date(e.target.value + 'T00:00:00');
+                if (!isNaN(d.getTime())) setFilterDate(d);
+              }}
+            />
+          </div>
+
           <div className="flex flex-col md:flex-row md:items-center gap-2 w-full">
-            <span className="text-xs md:text-sm text-gray-500">Filter by:</span>
-            <Select defaultValue="all-depts">
+            <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Filter by:</span>
+            <Select value={filterDept} onValueChange={setFilterDept}>
               <SelectTrigger className="w-full md:w-[150px]">
                 <SelectValue placeholder="All Departments" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-depts">All Departments</SelectItem>
-                <SelectItem value="hr">HR</SelectItem>
-                <SelectItem value="engineering">Engineering</SelectItem>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Select defaultValue="all-teams">
-              <SelectTrigger className="w-full md:w-[120px]">
-                <SelectValue placeholder="All Teams" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all-teams">All Teams</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select defaultValue="all-employees">
-              <SelectTrigger className="w-full md:w-[140px]">
+            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+              <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="All Employees" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-employees">All Employees</SelectItem>
+                <SelectItem value="all">All Employees</SelectItem>
+                {users.map(u => {
+                  const uid = u.userId?.toText ? u.userId.toText() : String(u.userId || u.id);
+                  return (
+                    <SelectItem key={uid} value={uid}>{u.name || u.username || uid}</SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
-            <Select defaultValue="all-status">
-              <SelectTrigger className="w-full md:w-[120px]">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-full md:w-[140px]">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all-status">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="present">Present</SelectItem>
+                <SelectItem value="absent">Absent</SelectItem>
+                <SelectItem value="late">Late</SelectItem>
+                <SelectItem value="half_day">Half Day</SelectItem>
               </SelectContent>
             </Select>
-             <Button variant="secondary" size="sm" className="w-full md:w-auto">
-              Apply Filters
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full md:w-auto"
+              onClick={() => {
+                setSearchQuery('');
+                setFilterDept('all');
+                setFilterEmployee('all');
+                setFilterStatus('all');
+                setFilterDate(new Date());
+                setShowHistory(false);
+              }}
+            >
+              Clear Filters
             </Button>
           </div>
         </div>
 
         <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full md:w-auto">
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full md:w-auto" onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
-          <Button variant="outline" className="w-full md:w-auto">
+          <Button
+            variant={showHistory ? "default" : "outline"}
+            className="w-full md:w-auto"
+            onClick={() => setShowHistory(prev => !prev)}
+          >
             <History className="mr-2 h-4 w-4" />
-            View History
+            {showHistory ? 'Back to Daily' : 'View History'}
           </Button>
         </div>
-        </div>
+      </div>
 
       {/* Table */}
       <Card>
+        {/* Mobile cards */}
         <div className="space-y-3 p-4 md:hidden">
-          {attendanceData.map((record) => {
+          {paginatedData.map((record) => {
             const user = getUserDetails(record.userId);
             const status = record.status;
             const idText = user?.id?.toText ? user.id.toText() : (record.userId?.toText ? record.userId.toText() : String(record.userId));
             return (
-              <Card key={record.id} className="border border-border shadow-sm">
+              <Card key={record.id || record._id} className="border border-border shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -523,20 +659,17 @@ export default function AttendanceModule({ userProfile }) {
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                     <div>
+                      <span className="block text-[10px] uppercase tracking-wide">Date</span>
+                      <span className="text-foreground/90">{record.date || '--'}</span>
+                    </div>
+                    <div>
                       <span className="block text-[10px] uppercase tracking-wide">Department</span>
                       <span className="text-foreground/90">{user?.department || '--'}</span>
                     </div>
-                    <div>
+                    <div className="col-span-2">
                       <span className="block text-[10px] uppercase tracking-wide">In / Out</span>
                       <span className="text-foreground/90">
                         {formatTime(getCheckInTime(record))} - {getCheckOutTime(record) ? formatTime(getCheckOutTime(record)) : '--'}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="block text-[10px] uppercase tracking-wide">Location</span>
-                      <span className="text-foreground/90 flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {record.location || 'Office Main'}
                       </span>
                     </div>
                   </div>
@@ -544,16 +677,19 @@ export default function AttendanceModule({ userProfile }) {
               </Card>
             );
           })}
-          {attendanceData.length === 0 && (
+          {paginatedData.length === 0 && (
             <p className="text-center py-6 text-sm text-muted-foreground">
-              No attendance records found for this date.
+              No attendance records found.
             </p>
           )}
         </div>
+
+        {/* Desktop table */}
         <div className="hidden md:block">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
+                {showHistory && <TableHead>Date</TableHead>}
                 <TableHead>Employee</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Department</TableHead>
@@ -564,11 +700,12 @@ export default function AttendanceModule({ userProfile }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {attendanceData.map((record) => {
+              {paginatedData.map((record) => {
                   const user = getUserDetails(record.userId);
                   const status = record.status;
                   return (
-                    <TableRow key={record.id}>
+                    <TableRow key={record.id || record._id}>
+                      {showHistory && <TableCell className="text-muted-foreground">{record.date}</TableCell>}
                       <TableCell className="font-medium">{user?.id?.toText ? user.id.toText() : (record.userId?.toText ? record.userId.toText() : String(record.userId))}</TableCell>
                       <TableCell>{user?.name || user?.username || '--'}</TableCell>
                       <TableCell>{user?.department || '--'}</TableCell>
@@ -594,23 +731,68 @@ export default function AttendanceModule({ userProfile }) {
                     </TableRow>
                   );
               })}
-              {attendanceData.length === 0 && (
+              {paginatedData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No attendance records found for this date.
+                  <TableCell colSpan={showHistory ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                    No attendance records found.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
           <div className="p-4 border-t flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Showing {attendanceData.length} entries</p>
-              <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled>Previous</Button>
-                  <Button variant="outline" size="sm" className="bg-primary/10 text-primary border-primary/20">1</Button>
-                  <Button variant="outline" size="sm">Next</Button>
+              <p className="text-sm text-muted-foreground">
+                Showing {filteredAttendance.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredAttendance.length)} of {filteredAttendance.length} entries
+              </p>
+              <div className="flex gap-2 items-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <span className="text-sm font-medium px-2">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
               </div>
           </div>
+        </div>
+
+        {/* Mobile pagination */}
+        <div className="p-4 border-t flex items-center justify-between md:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage <= 1}
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </Card>
     </div>

@@ -505,15 +505,19 @@ app.post('/api/users/:userId/avatar', (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Restriction check
-    if (existingUser.lastAvatarUpdate) {
-      const diff = Date.now() - existingUser.lastAvatarUpdate.getTime();
-      const days = diff / (1000 * 60 * 60 * 24);
-      if (days < 15) {
-        if (req.file) fs.unlinkSync(req.file.path);
-        return res.status(400).json({ 
-          message: `Profile photo can only be changed once every 15 days. Please wait ${Math.ceil(15 - days)} more days.` 
-        });
+    // 15-day restriction only for self-uploads; admin/owner/param can change any user's avatar
+    const isSelfUpload = req.user?.userId === userId;
+    const isPrivileged = ['admin', 'owner', 'param'].includes(req.user?.role);
+    if (isSelfUpload || !isPrivileged) {
+      if (existingUser.lastAvatarUpdate) {
+        const diff = Date.now() - existingUser.lastAvatarUpdate.getTime();
+        const days = diff / (1000 * 60 * 60 * 24);
+        if (days < 15) {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(400).json({ 
+            message: `Profile photo can only be changed once every 15 days. Please wait ${Math.ceil(15 - days)} more days.` 
+          });
+        }
       }
     }
 

@@ -34,15 +34,22 @@ export default function DashboardHome({ userProfile, onNavigate }) {
   const todayAttendance = allAttendance.filter(a => a.date === todayDate);
   const activeUsersToday = new Set(todayAttendance.map(a => a.userId.toText())).size;
 
-  // Owner specific stats (Staff in their department or all staff if no department filter enforced yet)
+  // Owner specific stats — all employees in their company (exclude param)
+  const myCompanyEmployees = users.filter(u => {
+    const rk = Object.keys(u.role)[0];
+    return rk !== 'param';
+  });
   const myDepartmentStaff = userProfile.department 
-    ? users.filter(u => (u.role.hasOwnProperty('staff') || u.role.hasOwnProperty('intern') || u.role.hasOwnProperty('freelancer')) && u.department === userProfile.department)
-    : users.filter(u => u.role.hasOwnProperty('staff') || u.role.hasOwnProperty('intern') || u.role.hasOwnProperty('freelancer'));
+    ? myCompanyEmployees.filter(u => u.department === userProfile.department)
+    : myCompanyEmployees;
     
   const activeMyStaffToday = new Set(
     todayAttendance.filter(a => {
       const user = users.find(u => u.id.toText() === a.userId.toText());
-      return user && (userProfile.department ? user.department === userProfile.department : (user.role.hasOwnProperty('staff') || user.role.hasOwnProperty('intern') || user.role.hasOwnProperty('freelancer')));
+      if (!user) return false;
+      const rk = Object.keys(user.role)[0];
+      if (rk === 'param') return false;
+      return userProfile.department ? user.department === userProfile.department : true;
     }).map(a => a.userId.toText())
   ).size;
 
@@ -122,7 +129,7 @@ export default function DashboardHome({ userProfile, onNavigate }) {
 
     // Owner Cards
     {
-      title: 'Total Staff Count',
+      title: 'Total Employees',
       value: myDepartmentStaff.length,
       icon: Users,
       color: 'text-blue-600 dark:text-blue-400',

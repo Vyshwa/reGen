@@ -245,14 +245,18 @@ export const updateUser = async (req, res) => {
     if (!existingUser) return res.status(404).json({ message: 'User not found' });
 
     if (body.avatar !== undefined && body.avatar !== existingUser.avatar) {
-      // Check lastAvatarUpdate limit
-      if (existingUser.lastAvatarUpdate) {
-        const diff = Date.now() - existingUser.lastAvatarUpdate.getTime();
-        const days = diff / (1000 * 60 * 60 * 24);
-        if (days < 15) {
-          return res.status(400).json({ 
-            message: `Profile photo can only be changed once every 15 days. Please wait ${Math.ceil(15 - days)} more days.` 
-          });
+      // 15-day cooldown only applies to self-edits; admin/owner/param can change any user's avatar
+      const isSelfEdit = req.user?.userId === id;
+      const isPrivileged = ['admin', 'owner', 'param'].includes(req.user?.role);
+      if (isSelfEdit || !isPrivileged) {
+        if (existingUser.lastAvatarUpdate) {
+          const diff = Date.now() - existingUser.lastAvatarUpdate.getTime();
+          const days = diff / (1000 * 60 * 60 * 24);
+          if (days < 15) {
+            return res.status(400).json({ 
+              message: `Profile photo can only be changed once every 15 days. Please wait ${Math.ceil(15 - days)} more days.` 
+            });
+          }
         }
       }
       body.avatar = await normalizeAvatarInput(body.avatar, id || body.userId || body.username || body.name || 'user');

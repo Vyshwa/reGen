@@ -200,7 +200,14 @@ export default function CompanyModule({ userProfile }) {
 
   const ownerDepartments = useMemo(() => {
     if (!isOwner && !isAdmin) return [];
-    const staffUsers = users.filter(u => u.role && (u.role.hasOwnProperty('staff') || u.role.hasOwnProperty('intern') || u.role.hasOwnProperty('freelancer')));
+    // Filter users to the selected company so counts are company-specific
+    const companyUsers = selectedCompanyId
+      ? users.filter(u => {
+          const uid = u.companyId?._id || u.companyId;
+          return uid && String(uid) === String(selectedCompanyId);
+        })
+      : users;
+    const staffUsers = companyUsers.filter(u => u.role && (u.role.hasOwnProperty('staff') || u.role.hasOwnProperty('intern') || u.role.hasOwnProperty('freelancer') || u.role.hasOwnProperty('admin') || u.role.hasOwnProperty('owner')));
     const deptMap = new Map();
 
     staffUsers.forEach(u => {
@@ -214,7 +221,7 @@ export default function CompanyModule({ userProfile }) {
     return Array.from(deptMap.values()).sort((a, b) =>
       a.department.localeCompare(b.department),
     );
-  }, [users, isOwner, isAdmin]);
+  }, [users, isOwner, isAdmin, selectedCompanyId]);
 
   const departmentCards = useMemo(() => {
     return ownerDepartments.map(dept => {
@@ -262,8 +269,8 @@ export default function CompanyModule({ userProfile }) {
                       <Users2 className="w-6 h-6" />
                    </div>
                    <div>
-                      <p className="text-sm text-muted-foreground font-medium">Total Resource</p>
-                      <h3 className="text-2xl font-bold">{users.length} Staff</h3>
+                      <p className="text-sm text-muted-foreground font-medium">Total Employees</p>
+                      <h3 className="text-2xl font-bold">{ownerDepartments.reduce((sum, d) => sum + d.staff.length, 0)}</h3>
                    </div>
                 </CardContent>
               </Card>
